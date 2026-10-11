@@ -6,7 +6,7 @@ import { activeDesignAgent } from "../policy/design/flag";
 import { runDesignChecks } from "../policy/design/content-checks";
 import { uiDesignSkillGate } from "../policy/design/skill-gate";
 import { collectDesignEvidence } from "../policy/design/skill-evidence";
-import { findDesignSystem, recordPost, designSystemContentGate } from "./design-helpers";
+import { findDesignSystem, findDesignSystemForFile, recordPost, designSystemContentGate } from "./design-helpers";
 import { checkDesignSystemContent } from "./design-content-gate";
 import { designFilesGate } from "./design-files-gate";
 import { resolveCorpusRoot, resolvePluginsRoot, pluginsWriteGuard } from "../policy/design/corpus";
@@ -59,6 +59,10 @@ export function designGate(payload: Record<string, unknown>, event: NormalizedEv
   let state = loadDesignState(cacheDir, id);
   if (!state) {
     if (!active) return null;
+    // dd8a2e1 parity (passe 3): the SESSION mode/quota is decided by the cwd
+    // walk ONLY — never by the first event's filePath (a Read/Grep/Write under
+    // a sub/ holding a design-system.md must not flip the session to "page").
+    // The per-file resolver (findDesignSystemForFile) stays at the write gates.
     const dsExists = findDesignSystem(cwd) !== "";
     state = initDesignState(id, dsExists ? "page" : "full", dsExists);
     saveDesignState(cacheDir, state);
@@ -82,7 +86,7 @@ export function designGate(payload: Record<string, unknown>, event: NormalizedEv
     const fp = event.filePath ?? "";
     // Parity: only design-system.md is screenshot-quota-gated (designSystemWriteGate).
     const base = pluginsWriteGuard(fp, pluginsRoot) ?? stateFileGate(fp) ?? htmlCssOnlyGate(fp)
-      ?? htmlCssPipelineGate(fp, state, findDesignSystem(cwd) !== "") ?? designSystemWriteGate(fp, state, corpusRequired)
+      ?? htmlCssPipelineGate(fp, state, findDesignSystemForFile(cwd, fp) !== "") ?? designSystemWriteGate(fp, state, corpusRequired, corpusRoot)
       ?? designSystemContentGate({ filePath: fp, tool: event.tool, content: event.content ?? "", oldString: event.oldString, replaceAll: event.input.replace_all === true, state, corpusRoot, corpusRequired });
     if (base) return base;
     if (geminiEnabled() && state.geminiCalls === 0 && /\.(html|css)$/.test(fp)) {
@@ -90,8 +94,13 @@ export function designGate(payload: Record<string, unknown>, event: NormalizedEv
     }
     return null;
   }
-  // Codex apply_patch (D2): gate each fanned-out file like a Write.
-  if (event.files && event.files.length > 0) return designFilesGate(event.files, state, pluginsRoot, corpusRoot, corpusRequired, cwd, findDesignSystem(cwd) !== "");
+  // Codex apply_patch (D2): gate each fanned-out file like a Write. The
+  // design-system.md lookup is PER FILE (passe 2): each patched file gets the
+  // verdict it would get written alone — resolving once from the first file
+  // let a found (or missing) design-system.md leak onto the whole envelope.
+  if (event.files && event.files.length > 0) {
+    return designFilesGate(event.files, state, pluginsRoot, corpusRoot, corpusRequired, cwd, (fp) => findDesignSystemForFile(cwd, fp) !== "");
+  }
   if (event.tool === NAV) {
     return browserNavigateGate(state, typeof event.input.url === "string" ? event.input.url : "");
   }
@@ -104,7 +113,7 @@ export function designGate(payload: Record<string, unknown>, event: NormalizedEv
     // Parity validate-design-system.py DENY_NOT_FOUND: a MISSING file gets its own
     // recovery message, distinct from the "too generic" message for a present-but-thin one.
     if (ds === "") {
-      return { kind: "block", title: "Design pipeline", reason: "BLOCKED: design-system.md not found. RECOVERY: 1) Read the identity templates 2) Read design-inspiration.md 3) Read the refs-design corpus (README.md + relevant tokens-*.md) 4) Screenshot 1-2 real sector sites 5) Write design-system.md, then retry create_frontend.", actions: ["Create design-system.md via the pipeline, then retry create_frontend"] };
+      return { kind: "block", title: "Design pipeline", reason: "BLOCKED: design-system.md not found. RECOVERY: 1) Read the identity templates 2) Read design-inspiration.md 3) Read the refs-design corpus (README.md + relevant tokens-*.md) 4) Capture 1-2 real sector sites with any fuse-browser screenshot tool (browser_screenshot, browser_shots_batch, browser_site_shots) 5) Write design-system.md, then retry create_frontend.", actions: ["Create design-system.md via the pipeline, then retry create_frontend"] };
     }
     // Same content rules as the nominal write path (jointure included): the
     // Gemini branch must not be weaker than the gate the Write just went through.

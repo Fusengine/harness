@@ -156,7 +156,9 @@ unreadable list supplies no terms. Currency amounts (`$`, `€`, `£`,
 Write/Edit/MultiEdit content under `sourceDir` is scanned in full (no size
 cut-off), not the on-disk file or arbitrary Bash-generated content. Shell
 positional parameters (`$1`, `${2}`, `awk '{print $1}'`) are not treated as
-currency amounts. Detected values deny the write
+currency amounts, nor are field references (`$3`, `$NF`, `${2}`) in the code
+of a closed, single-quoted multi-line awk/gawk/mawk program in shell command
+position; awk string literals and comments are still scanned. Detected values deny the write
 and are masked in the report: one-/two-character values are fully masked;
 longer ones retain only their first character.
 Source: [`sensitive.ts`](../src/policy/motion/sensitive.ts).

@@ -1,21 +1,47 @@
 import type { Prompt } from "../../prompt/types";
-import { type DesignState, quotaFor } from "./state";
+import { type DesignMode, type DesignState, quotaFor } from "./state";
+import { corpusReady } from "./corpus";
 import { PLUGINS_DIR } from "../file-size";
 import { deny } from "./gates";
 import { isTemplateUrl } from "./template-urls";
 
 const SKILLS = `${PLUGINS_DIR}/design-expert/skills`;
 
-/** Gate writing design-system.md: requires phase >= 2 and the per-mode screenshot quota. */
-export function designSystemWriteGate(filePath: string, state: DesignState, corpusRequired = false): Prompt | null {
+/** Per-mode corpus-read requirement spelled out for refusal texts (MIRRORS `corpusReady` — display only, thresholds unchanged). */
+const CORPUS_NEED: Readonly<Record<DesignMode, string>> = {
+  component: "1 corpus file",
+  page: "2 corpus files",
+  full: "README.md + 3 tokens-*.md files",
+};
+
+/**
+ * The unmet phase-2 requirements, one entry per gap: corpus reads credited at
+ * the CREDITED root (with its path) when the corpus is delivered, and the
+ * screenshot count as taken/required (N/M). A satisfied requirement is simply
+ * absent from the list, so the refusal names exactly what is missing.
+ */
+function missingRequirements(state: DesignState, corpusRequired: boolean, corpusRoot: string): string[] {
+  const missing: string[] = [];
+  if (corpusRequired && !corpusReady(state.corpusReads, state.mode)) {
+    missing.push(`corpus reads: ${state.corpusReads.length} credited under '${corpusRoot}' (required: ${CORPUS_NEED[state.mode]})`);
+  }
+  const needed = quotaFor(state.mode, corpusRequired);
+  if (state.screenshotsCount < needed) {
+    missing.push(`screenshots: ${state.screenshotsCount}/${needed} (any fuse-browser capture counts — browser_screenshot, browser_shots_batch, browser_site_shots)`);
+  }
+  return missing;
+}
+
+/** Gate writing design-system.md: requires phase >= 2 and the per-mode screenshot quota. The refusal lists exactly what is missing. */
+export function designSystemWriteGate(filePath: string, state: DesignState, corpusRequired = false, corpusRoot = ""): Prompt | null {
   if (!filePath.endsWith("design-system.md")) return null;
   if (state.currentPhase < 2) {
+    const missing = missingRequirements(state, corpusRequired, corpusRoot);
     return deny(
-      `BLOCKED: Cannot write design-system.md at phase ${state.currentPhase}. ` +
+      `BLOCKED: Cannot write design-system.md at phase ${state.currentPhase}. Missing: ${missing.join("; ") || "phase-2 requirements"}. ` +
         "RECOVERY: 1) Read identity templates from skills/design-system/ " +
         "2) Read design-inspiration.md 3) Read the refs-design corpus (README.md + relevant tokens-*.md) with the Read tool " +
-        "4) Screenshot real sector sites with mcp__fuse-browser__browser_screenshot on a LIVE session " +
-        "(browser_shots_batch/browser_site_shots also count, 1 credit per call) " +
+        "4) Capture real sector sites with any fuse-browser screenshot tool (browser_screenshot, browser_shots_batch, browser_site_shots — 1 credit per call) " +
         "5) Then write design-system.md",
     );
   }
@@ -23,10 +49,8 @@ export function designSystemWriteGate(filePath: string, state: DesignState, corp
   if (state.screenshotsCount < needed) {
     return deny(
       `BLOCKED: ${state.screenshotsCount}/${needed} screenshots for mode '${state.mode}'. ` +
-        `RECOVERY: 1) Read the refs-design corpus (README.md + tokens-*.md) if not done ` +
-        `2) Take ${needed - state.screenshotsCount} more screenshots of REAL sector sites with ` +
-        "mcp__fuse-browser__browser_screenshot (browser_shots_batch/browser_site_shots also count, 1 credit per call) " +
-        "3) Use browser_open + browser_navigate + browser_screenshot fullPage:true 4) Then write design-system.md",
+        `RECOVERY: take ${needed - state.screenshotsCount} more capture(s) with any fuse-browser screenshot tool ` +
+        "(browser_screenshot, browser_shots_batch, browser_site_shots — 1 credit per call), then write design-system.md",
     );
   }
   return null;
@@ -50,8 +74,8 @@ export function htmlCssPipelineGate(filePath: string, state: DesignState, design
   return deny(
     `BLOCKED: cannot write '${filePath}' before the design-system pipeline is complete (${gaps.join(", ")}). ` +
       "RECOVERY: 1) Read identity templates from skills/design-system/ 2) Read design-inspiration.md " +
-      "3) Read the refs-design corpus with the Read tool 4) Screenshot real sector sites with " +
-      "mcp__fuse-browser__browser_screenshot on a LIVE session 5) Write a valid design-system.md " +
+      "3) Read the refs-design corpus with the Read tool 4) Capture real sector sites with any fuse-browser " +
+      "screenshot tool (browser_screenshot, browser_shots_batch, browser_site_shots) 5) Write a valid design-system.md " +
       "6) Then write .html/.css",
   );
 }

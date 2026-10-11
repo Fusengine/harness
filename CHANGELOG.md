@@ -4,6 +4,15 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.106] - 2026-10-11
+
+### Fixed
+
+- **motion: field references in a multi-line awk program (`$3`, `$NF`, `${2}`) are no longer read as currency amounts** (`src/policy/motion/program-bodies.ts`, `sensitive.ts`) — only inside a single-quoted awk/gawk/mawk body in shell command position (not in a quote, `#` comment or heredoc), closed, containing `{`, and only in code position; awk string literals, awk comments and bullet lines keep their amounts; `sh -c`/`bash -c` and double-quoted awk bodies are scanned as before. Known limit: a prose line with an amount placed inside an otherwise-awk body (not valid awk) is not flagged. Tests: `motion-sensitive`, `motion-sensitive-diff`.
+- **design: `design-system.md` is resolved from the written file's directory upward** (`src/runtime/design.ts`, `design-helpers.ts`, `design-files-gate.ts`) — real paths, confined to the real cwd, empty/unreadable candidates skipped, then cwd; per-file verdict for Write/Edit/apply_patch; session mode/quota unchanged (still decided from cwd). Tests: `design-system-locate`, `design-init-parity`.
+- **design: deny texts list exactly what is missing** (`src/policy/design/gates-pipeline.ts`) — corpus reads counted at the credited root (with its path) and screenshots taken/required (N/M); any fuse-browser capture counts. Blocking conditions and thresholds unchanged. Tests: `design-refusal-text`, `design-html-css-pipeline-gate`.
+- **motion: the PreToolUse budget note counts completed renders (incremented by PostToolUse)** — verified, not a bug; test added: `motion-budget-note`.
+
 ## [0.1.105] - 2026-10-11
 
 ### Fixed

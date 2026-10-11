@@ -73,10 +73,11 @@ export function substituteLiteral(s: string, from: string, to: string, all: bool
 
 /**
  * Gate every file of a multi-file write primitive; the first violation blocks
- * the envelope. `designSystemFileExists` is caller-computed (`findDesignSystem`
+ * the envelope. `designSystemExistsFor` is caller-injected (`findDesignSystem*`
  * lives in `design-helpers.ts`, which itself imports `substituteLiteral` from
- * THIS module — importing it back here would cycle) so both write paths
- * (Write/Edit in `design.ts`, apply_patch here) consume the SAME disk read.
+ * THIS module — importing it back here would cycle) and is evaluated PER FILE:
+ * each patched file gets the same design-system.md verdict it would get
+ * written alone by Write/Edit — a hit for one file never leaks to the others.
  */
 export function designFilesGate(
   files: readonly NormalizedFile[],
@@ -85,7 +86,7 @@ export function designFilesGate(
   corpusRoot: string,
   corpusRequired: boolean,
   cwd: string,
-  designSystemFileExists: boolean,
+  designSystemExistsFor: (filePath: string) => boolean,
 ): Prompt | null {
   for (const f of files) {
     const hit = pluginsWriteGuard(f.filePath, pluginsRoot, cwd) ?? stateFileGate(f.filePath);
@@ -95,7 +96,7 @@ export function designFilesGate(
     if (htmlCssHit) return htmlCssHit;
     // Parity with design.ts's htmlCssPipelineGate call: SAME verdict for the
     // SAME file+state on both write paths (Write/Edit vs apply_patch).
-    const pipelineHit = htmlCssPipelineGate(f.filePath, state, designSystemFileExists);
+    const pipelineHit = htmlCssPipelineGate(f.filePath, state, designSystemExistsFor(f.filePath));
     if (pipelineHit) return pipelineHit;
     // apply_patch parity for the Gemini precondition (design.ts:72-74, D2 gap):
     // same condition, same Prompt shape as the Write/Edit branch — opt-in via
@@ -104,7 +105,7 @@ export function designFilesGate(
       return { kind: "block", title: "Design pipeline", reason: "BLOCKED: generate the frontend via create_frontend before hand-writing HTML/CSS.", actions: ["Call mcp__gemini-design__create_frontend first"] };
     }
     if (!f.filePath.endsWith("design-system.md")) continue;
-    const gate = designSystemWriteGate(f.filePath, state, corpusRequired)
+    const gate = designSystemWriteGate(f.filePath, state, corpusRequired, corpusRoot)
       ?? (f.op === "add"
         ? designSystemContentGate({ filePath: f.filePath, tool: "Write", content: f.content, oldString: undefined, replaceAll: false, state, corpusRoot, corpusRequired })
         : null);
