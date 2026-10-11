@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { stripProgramBodies } from "./program-bodies";
 import { motionHome } from "./store";
 
 /** Currency amount: `12 €`, `1 299,50 EUR`, `$1,299.00`, `£ 40`. Horizontal spaces only (incl. NBSP / narrow NBSP). */
@@ -17,8 +18,15 @@ const CURRENCY_RE = /\b\d[\d \t  .,]{0,24}[ \t  ]?(?:[$€£]|(?:USD|EUR|G
 /** Replacement references and positional parameters on recognizable shell-command lines are not prices. */
 const REPLACE_LINE_RE = /(?:\breplace(?:All)?\s*\(|\.sub\()/;
 const SHELL_LINE_RE = /(?:^|[;|&]\s*)\s*(?:echo|printf|awk|gawk|mawk|sh|bash|zsh|exec|export)\b/;
+
+/**
+ * Line rules unchanged since dd8a2e1; the only extension is {@link stripProgramBodies},
+ * which strips field references in code position inside single-quoted awk/gawk/mawk bodies
+ * opened AND closed by a quote in the same source. Template literals never qualify:
+ * `` `${a}$1` `` has the same shape as the real price `` `${cur}$5` ``, so both stay blocked.
+ */
 const stripBackrefs = (text: string): string =>
-  text.split("\n").map((line) => {
+  stripProgramBodies(text).split("\n").map((line) => {
     // A standalone positional token is code, not a price declaration; a literal integer dollar price is ambiguous.
     if (/^\s*\$(?:\d|\{\d+\})\s*$/.test(line)) return "";
     if (REPLACE_LINE_RE.test(line)) return line.replace(/\$\d(?![\d.,])/g, "");
