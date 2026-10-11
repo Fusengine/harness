@@ -54,12 +54,26 @@ export interface MotionPending {
   sessionId: string;
 }
 
+/** One render reservation keyed by `tool_use_id`; `sessionId`/`agentId` absent on pre-0.1.104 entries (TTL-only expiry). */
+export interface MotionRenderStart {
+  stage: MotionStage;
+  ts: number;
+  sessionId?: string;
+  agentId?: string;
+}
+
 /** Render counters (per stage), accumulated wall time, and in-flight render starts. */
 export interface MotionBudget {
   renders: Partial<Record<MotionStage, number>>;
   wallMs: Partial<Record<MotionStage, number>>;
-  /** In-flight render start times keyed by `tool_use_id`. */
-  inflight: Record<string, { stage: MotionStage; ts: number }>;
+  /** Fresh in-flight reservations: they block concurrent renders and count against the master cap. */
+  inflight: Record<string, MotionRenderStart>;
+  /**
+   * TTL-expired reservations retained so a late completion still settles (budget + output
+   * attribution) exactly like an unexpired render; they never block nor count, and are
+   * forgotten past the 24 h horizon. Absent when empty (0.1.103-compatible file shape).
+   */
+  expired?: Record<string, MotionRenderStart>;
 }
 
 /** What a Bash command does with respect to the render pipeline. */

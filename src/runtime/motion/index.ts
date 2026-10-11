@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
 import type { HandleOptions, HandleOutcome } from "../handle-types";
 import type { NormalizedEvent } from "../normalize";
-import { motionCall } from "./host";
-import { motionSubagent } from "./lifecycle";
+import { motionCall, stopReleasesRenders } from "./host";
+import { motionSubagent, motionSessionStop } from "./lifecycle";
 import { motionPost } from "./post";
 import { motionPre } from "./pre";
 import { motionPrompt } from "./prompt";
@@ -22,7 +22,7 @@ import { approvalGate } from "../../policy/motion/gates";
 import { classifyMotionCommand, shellMotionWriteTargets } from "../../policy/motion/command";
 import { commandContexts } from "../../policy/motion/command-context";
 import { canonicalFilePath } from "../prd/prd-canon";
-import { loadBudget, releaseRender } from "../../policy/motion/budget";
+import { findReservation, loadBudget, releaseRender } from "../../policy/motion/budget";
 import { existsSync } from "node:fs";
 
 /** Dispatch on the host-native event, reduced to its meaning for motion. */
@@ -31,6 +31,7 @@ function motionStdout(id: string, payload: Record<string, unknown>, event: Norma
     case "subagentStart":
     case "subagentStop":
       motionSubagent(call.kind === "subagentStart" ? "SubagentStart" : "SubagentStop", payload, event.sessionId, opts.home ?? homedir());
+      if (call.kind === "subagentStop" && event.agentId && stopReleasesRenders(id)) motionSessionStop(event.sessionId, event.agentId, opts.home ?? homedir(), opts.now);
       return "";
     case "prompt":
       return motionPrompt(id, payload, call, event.sessionId, opts);
@@ -41,6 +42,10 @@ function motionStdout(id: string, payload: Record<string, unknown>, event: Norma
       return motionPost(id, call, opts);
     case "stop":
       clearSessionCritics(event.sessionId, opts.home ?? homedir());
+      // The main turn's Stop releases NOTHING on any host: a sub-agent's
+      // PreToolUse may carry no agent_id, so its reservations cannot be told
+      // apart from the main turn's — a leak falls by the TTL (see
+      // `stopReleasesRenders`).
       return "";
     default:
       return "";
@@ -84,7 +89,7 @@ function lockedMotionHook(id: string, payload: Record<string, unknown>, event: N
       if (first && state.coldArtifacts?.length) coldNotice = "Motion existing cold draft/master outputs are preserved but not approved; approve stills and complete an authorized draft render before G2.";
     }
     const terminal = kind === "post" || kind === "failure";
-    const terminalMatches = terminal && call.event.toolUseId ? states.filter((state) => loadBudget(state.project.root, home).inflight[call.event.toolUseId!]) : [];
+    const terminalMatches = terminal && call.event.toolUseId ? states.filter((state) => findReservation(loadBudget(state.project.root, home), call.event.toolUseId!)) : [];
     const settlementId = terminalMatches.length > 1 ? undefined : call.event.toolUseId;
     const terminalReceipt = terminalMatches.length === 1 && settlementId ? terminalMatches[0]!.renders[settlementId] : undefined;
     const messages = states.flatMap((state) => verifyMotionState(state, event.sessionId, settlementId, terminal, home, call.event.tool === "Read", kind !== "failure"));
@@ -99,7 +104,7 @@ function lockedMotionHook(id: string, payload: Record<string, unknown>, event: N
     let terminalStdout: string | undefined;
     if (kind === "post" || kind === "failure") {
       const terminalProject = terminalMatches.length === 1 ? terminalMatches[0]!.project : null;
-      const start = terminalProject && call.event.toolUseId ? loadBudget(terminalProject.root, home).inflight[call.event.toolUseId] : undefined;
+      const start = terminalProject && call.event.toolUseId ? findReservation(loadBudget(terminalProject.root, home), call.event.toolUseId) : undefined;
       const targets = new Set<string>();
       if (terminalProject && terminalReceipt) for (const directory of new Set([opts.cwd, terminalProject.root])) {
         for (const [segment, cwd] of commandContexts(terminalReceipt.command, directory, home)) {
