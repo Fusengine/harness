@@ -4,6 +4,12 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.105] - 2026-10-11
+
+### Fixed
+
+- **motion: a PreToolUse delivered twice with the same tool_use_id is idempotent instead of blocking itself** (`src/runtime/motion/pre.ts`) — Claude Code may deliver the SAME PreToolUse Bash twice (same session, same `tool_use_id`, same command): the first pass reserved the render and answered with the "Motion render" note, and the second pass was denied by its own reservation ("Motion concurrent render"), each retry opening a new reservation. On a host with a native id (not `noid:`), a second pass whose id already owns a FRESH in-flight reservation AND whose receipt matches session, stage and command now replays the first verdict — the same "Motion render" budget note — with no new reservation and budget and state byte-identical. Unchanged: another `tool_use_id` of the same stage is still denied while a reservation is fresh; the same id with a different command, session or stage keeps the existing refusals; `noid:` ids (derived from session + command, a real second call is indistinguishable) and ids present only in `expired` stay refused; approvals G1/G2, the master cap, quarantine and the TTL are untouched, and a corrupt budget stays fail-closed. Test: `motion-dup-pre`.
+
 ## [0.1.104] - 2026-10-11
 
 ### Fixed

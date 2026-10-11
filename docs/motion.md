@@ -180,7 +180,12 @@ writes); a failed tool call releases the reservation without counting.
 Correlation uses each host's native call id (`tool_use_id`, Kimi
 `tool_call_id`), scoped by session; hosts without one (gemini-cli, cline,
 hermes, cursor without id) use a single-flight identity derived from session,
-working directory and command. A corrupt budget file is never repaired: renders
+working directory and command. A host with a native id may deliver the same
+PreToolUse twice (same `tool_use_id`): while the reservation is fresh and the
+recorded receipt matches session, stage and command, the second delivery is
+idempotent — no new reservation, budget and state byte-identical, same "Motion
+render" note; any mismatch (or a `noid:` id) keeps the existing refusals.
+A corrupt budget file is never repaired: renders
 stay denied until the owner fixes it. There is no wall
 time cap. `FUSE_MOTION_MAX_MASTER_RENDERS` sets the master-render count cap:
 a positive integer denies further masters once reached; unset, empty,
