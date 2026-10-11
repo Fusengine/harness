@@ -5,8 +5,8 @@
  * `design.ts` to keep that file within the SOLID size budget (SRP).
  * @packageDocumentation
  */
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { NormalizedEvent } from "./normalize";
 import { type DesignState, saveDesignState } from "../policy/design/state";
 import { recordNavigate, recordScroll, recordScreenshot, recordValidDesignSystem } from "../policy/design/transitions";
@@ -38,6 +38,74 @@ export function findDesignSystem(cwd: string): string {
     dir = parent;
   }
   return "";
+}
+
+/**
+ * Resolve design-system.md for a FILE WRITE: walk up from dirname(`filePath`)
+ * toward `cwd` (inclusive) — a design-system.md sitting next to the written
+ * file, or anywhere between it and the project root, now counts — then fall
+ * back to the historical cwd walk ({@link findDesignSystem}). The upward walk
+ * NEVER climbs above cwd (containment via `path.relative`, so `..` escapes
+ * after join-normalization are refused), hence nothing is picked up from
+ * $HOME or / that the old code would not already have found. With no written
+ * file (empty `filePath`) the behavior is byte-identical to before.
+ *
+ * Two passe-2 hardenings, both dd8a2e1-parity restorations:
+ *  - REAL-PATH containment: a candidate only counts when `realpathSync`
+ *    places it inside `realpathSync(cwd)` — a symlinked directory pointing
+ *    outside cwd, or a design-system.md that is itself a symlink to an
+ *    outside file, is SKIPPED (the old code never saw it either). Both
+ *    sides are realpath'd: macOS resolves /var → /private/var, so comparing
+ *    a real path against a lexical one false-negatives.
+ *  - NO SHADOWING: an empty, unreadable, or not-a-file candidate
+ *    (directory) does not win — the walk continues upward, then the cwd
+ *    fallback applies. The fallback itself keeps the historical
+ *    first-found-wins semantics, so a present-but-empty cwd file still
+ *    reads as absent exactly like dd8a2e1.
+ */
+export function findDesignSystemForFile(cwd: string, filePath: string): string {
+  const root = resolve(cwd);
+  if (filePath) {
+    const abs = resolve(root, filePath); // resolve passes absolute filePath through, normalized
+    const rel = relative(root, abs);
+    const inside = rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+    if (inside) {
+      let realRoot: string;
+      try {
+        realRoot = realpathSync(root);
+      } catch {
+        realRoot = root;
+      }
+      let dir = dirname(abs);
+      for (;;) {
+        const p = join(dir, "design-system.md");
+        if (existsSync(p)) {
+          let real: string;
+          try {
+            real = realpathSync(p);
+          } catch {
+            real = "";
+          }
+          const relReal = real === "" ? ".." : relative(realRoot, real);
+          const realInside = real !== "" && relReal !== ".." && !relReal.startsWith(`..${sep}`) && !isAbsolute(relReal);
+          if (realInside) {
+            try {
+              const content = readFileSync(p, "utf8");
+              if (content !== "") return content;
+            } catch {
+              // unreadable or a directory (EISDIR): not a usable design system
+            }
+          }
+          // outside the real cwd, empty, or unreadable: keep walking up.
+        }
+        if (dir === root) break;
+        const parent = dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+      }
+    }
+  }
+  return findDesignSystem(cwd);
 }
 
 /** Apply a PostToolUse fuse-browser transition to the design state. */

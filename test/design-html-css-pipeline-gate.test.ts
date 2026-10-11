@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeEvent } from "../src/runtime/normalize";
@@ -32,12 +32,12 @@ const activatePhase0 = (cache: string): void => {
   setActiveDesignAgent(cache, "ag");
   saveDesignState(cache, initDesignState("ag", "full", false));
 };
-/** Design agent with the design-system validated BOTH in state AND on disk — the only ALLOW combination. */
-const activateReady = (cache: string, proj: string): void => {
+/** Design agent with the design-system validated BOTH in state AND on disk — the only ALLOW combination. `writeDs=false` keeps the state ready but leaves the file off disk. */
+const activateReady = (cache: string, proj: string, writeDs = true): void => {
   setActiveDesignAgent(cache, "ag");
   const state: DesignState = { ...initDesignState("ag", "page", true), currentPhase: 3, designSystemValid: true, designSystemExists: true };
   saveDesignState(cache, state);
-  writeFileSync(join(proj, "design-system.md"), URL_DS);
+  if (writeDs) writeFileSync(join(proj, "design-system.md"), URL_DS);
 };
 
 test("1) design-agent, .html, phase 0 -> DENY (the fix)", () => {
@@ -102,4 +102,52 @@ test("scope proof: htmlCssPipelineGate is a pure predicate over (filePath, state
   expect(htmlCssPipelineGate("notes.md", phase0, false)).toBeNull();
   expect(htmlCssPipelineGate("Foo.tsx", phase0, false)).toBeNull();
   expect(htmlCssPipelineGate("index.html", phase0, false)?.kind).toBe("block");
+});
+
+// --- Defect 2: design-system.md is resolved from dirname(<written file>) up toward cwd,
+// then falls back to the historical cwd walk. Never climbs above cwd; a
+// design-system.md in cwd yields the exact same verdict as before.
+
+test("8) design-system.md NEXT TO the written file (subdir of cwd) counts — the write passes", () => {
+  const cache = tmp();
+  const proj = tmp();
+  const sub = join(proj, "landing");
+  mkdirSync(sub);
+  activateReady(cache, sub); // ready state + design-system.md in the SUBDIR, not in cwd
+  expect(designGate({ agent_id: "ag" }, writeEv(sub, "index.html", "<html></html>"), cache, proj, "")).toBeNull();
+});
+
+test("9) no design-system.md anywhere -> refusal unchanged", () => {
+  const cache = tmp();
+  const proj = tmp();
+  activateReady(cache, proj, false); // ready state, but no design-system.md on disk at all
+  const v = designGate({ agent_id: "ag" }, writeEv(proj, "index.html", "<html></html>"), cache, proj, "");
+  expect(v?.kind).toBe("block");
+});
+
+test("10) design-system.md only in cwd -> verdict identical to before (write from a subdir allowed)", () => {
+  const cache = tmp();
+  const proj = tmp();
+  activateReady(cache, proj); // design-system.md at the cwd root, as today
+  expect(designGate({ agent_id: "ag" }, writeEv(join(proj, "landing"), "index.html", "<html></html>"), cache, proj, "")).toBeNull();
+});
+
+test("11) a design-system.md OUTSIDE the cwd subtree is never picked up", () => {
+  const cache = tmp();
+  const proj = tmp();
+  const outside = tmp();
+  writeFileSync(join(outside, "design-system.md"), URL_DS);
+  activateReady(cache, proj, false);
+  const v = designGate({ agent_id: "ag" }, writeEv(outside, "index.html", "<html></html>"), cache, proj, "");
+  expect(v?.kind).toBe("block");
+});
+
+test("12) apply_patch parity: design-system.md next to the patched file counts too", () => {
+  const cache = tmp();
+  const proj = tmp();
+  const sub = join(proj, "landing");
+  mkdirSync(sub);
+  activateReady(cache, sub);
+  const ev = apEv(patchAdd(join(sub, "index.html"), "<html></html>"), "ag");
+  expect(designGate({ agent_id: "ag" }, ev, cache, proj, "")).toBeNull();
 });
