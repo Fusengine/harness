@@ -6,7 +6,7 @@ import { activeCritics, isCriticAgentType } from "../../policy/motion/critic-fla
 import { criticViolation } from "../../policy/motion/critic";
 import { selfApprovalViolation } from "../../policy/motion/self-approval";
 import { approvalGate } from "../../policy/motion/gates";
-import { budgetLine, loadBudget, openRender, releaseRender } from "../../policy/motion/budget";
+import { budgetLine, loadBudget, openRender, pruneInflight, releaseRender } from "../../policy/motion/budget";
 import { budgetStage, classifyMotionCommand } from "../../policy/motion/command";
 import { approvalForgeryViolation } from "../../policy/motion/forgery";
 import { commandMotionProject } from "../../policy/motion/project-command";
@@ -132,13 +132,31 @@ export function motionPre(id: string, call: MotionCall, opts: HandleOptions, res
   const stage = budgetStage(cmd);
   if (!stage) return "";
   const state = observeMotionProject(project, event.sessionId, home);
-  if (Object.values(state.renders).some((entry) => entry.stage === stage)) {
+  // Expire leaked reservations: TTL-stale budget entries move to the retained
+  // expired map; drop only receipts whose reservation is entirely gone. A fresh
+  // reservation still blocks; an expired one admits the concurrent render but
+  // keeps its receipt, so a late completion keeps its output attribution.
+  const live = pruneInflight(project.root, opts.now, home);
+  const retained = loadBudget(project.root, home).expired ?? {};
+  let pruned = false;
+  for (const id of Object.keys(state.renders)) {
+    if (Object.hasOwn(live, id) || Object.hasOwn(retained, id)) continue;
+    delete state.renders[id];
+    pruned = true;
+  }
+  if (pruned) refreshMotionState(state, home);
+  if (Object.entries(state.renders).some(([id, entry]) => entry.stage === stage && Object.hasOwn(live, id))) {
     return respond(id, { kind: "block", title: "Motion concurrent render", reason: "A render of this protected stage is still active (includes in-flight reservations); concurrent writers to the same outputs cannot be safely attributed." }, respondAs);
   }
-  if (event.toolUseId?.startsWith("noid:") && Object.values(state.renders).some((entry) => entry.session === event.sessionId)) {
+  // A `noid:` id derives from session + command, so an EXPIRED reservation with
+  // this exact id means the same command may still be running: refuse its
+  // re-admission until the late completion settles it or the forget horizon
+  // drops it (an id never lives in inflight AND expired). The hosts concerned
+  // get no Stop release, so the 24 h horizon is the only other way out.
+  if (event.toolUseId?.startsWith("noid:") && (Object.hasOwn(retained, event.toolUseId) || Object.entries(state.renders).some(([id, entry]) => entry.session === event.sessionId && Object.hasOwn(live, id)))) {
     return respond(id, { kind: "block", title: "Motion render identity", reason: "A host without native tool-call ids permits only one active render in this session; finish or cancel that call first." }, respondAs);
   }
-  const reservation = openRender(project.root, event.toolUseId, stage, opts.now, home);
+  const reservation = openRender(project.root, event.toolUseId, stage, opts.now, home, process.env, event.sessionId, event.agentId);
   if (reservation) return respond(id, reservation, respondAs);
   if (event.toolUseId) state.renders[event.toolUseId] = { session: event.sessionId, stage, command };
   try { refreshMotionState(state, home); }

@@ -185,6 +185,36 @@ stay denied until the owner fixes it. There is no wall
 time cap. `FUSE_MOTION_MAX_MASTER_RENDERS` sets the master-render count cap:
 a positive integer denies further masters once reached; unset, empty,
 invalid, fractional, or non-positive values mean no cap.
+In-flight reservations expire: an entry older than
+`FUSE_MOTION_RENDER_TTL_MS` (default 1800000 ms = 30 min; same parsing rules
+as the master cap) no longer blocks a concurrent render of its stage nor
+counts against the master cap. It is not forgotten: the reservation moves to
+a retained `expired` map, so a late completion still counts the render
+(`renders`, `wallMs`) and attributes its outputs exactly as if it had not
+expired; entries are dropped only 24 h after their start, which bounds
+reservations whose tool never ran.
+The main turn's Stop releases **no reservation, on any host**: a sub-agent's
+PreToolUse may carry no `agent_id`, so its reservations are indistinguishable
+from the main turn's — releasing on Stop could free a render of a
+still-running background sub-agent. A main-turn leak falls by the TTL alone.
+On **claude-code only**, a SubagentStop with a non-empty `agent_id` releases
+that sub-agent's FRESH reservations (only entries written with the exact same
+`agent_id` can match, so this is safe on every host version); a render still
+running in another agent keeps blocking, and expired reservations — native-id
+or `noid:` — are never released by a stop event and stay settleable. Codex gets **no
+release**: an `exec_command` returns control to the model while the process
+keeps running (no PostToolUse until it finishes, and the process can outlive
+the turn), so a sub-agent can emit SubagentStop while its render is still
+active — releasing there would admit a concurrent render and lose the late
+completion. Every other host
+(kimi, cursor, gemini-cli, cline, hermes) gets **no release** on
+Stop/SubagentStop at all, because a sub-agent's end cannot be
+told apart from the main turn's there (kimi fires a marker-free Stop with the
+shared session id); the TTL and the 24 h horizon are the only backstop.
+The release is best-effort — a corrupt or busy
+budget is left untouched (the TTL is the backstop) and never changes the
+Stop/SubagentStop output, which stays identical to HEAD on every host.
+Entries written before 0.1.104 carry no session id and expire by TTL only.
 Source: [`budget.ts`](../src/policy/motion/budget.ts).
 
 ## Failures and known limits
@@ -202,8 +232,30 @@ Source: [`budget.ts`](../src/policy/motion/budget.ts).
   exhaustive; state verification is the backstop, applied at the next hook.
   The foreground operators `|&`, `;&` and `;;&` are not treated as detaching.
 - A render cancelled by the host without any terminal event (no PostToolUse,
-  no failure) keeps its reservation; there is deliberately no time-based
-  expiry, so a capped master budget can stay consumed until the owner clears it.
+  no failure) keeps its reservation until it expires: in-flight entries older
+  than `FUSE_MOTION_RENDER_TTL_MS` (default 30 min) stop blocking and counting
+  at the next admission check. The main turn's Stop never releases a
+  reservation; on claude-code a SubagentStop with a non-empty
+  `agent_id` releases that sub-agent's own fresh reservations (best-effort) —
+  a SubagentStop without a usable agent id releases nothing. Other hosts
+  (kimi, codex, cursor, gemini-cli, cline, hermes) never release on
+  Stop/SubagentStop. A render genuinely running
+  longer than the TTL no longer blocks a concurrent admission, but its
+  completion keeps full budget and output attribution as long as it settles
+  within 24 h of its start; past that horizon the reservation is forgotten
+  and its outputs are treated as unapproved.
+- On hosts without a native call id (gemini-cli, cline, hermes, cursor without
+  id), the render id derives from session + command, so relaunching the
+  identical command in the same session reproduces the same id: while that
+  id's expired reservation is retained, the re-run stays refused ("Motion
+  render identity") until the late completion settles it or the 24 h horizon
+  forgets it — these hosts get no Stop release, so the horizon is the last
+  way out.
+- The TTL is a deliberate trade-off: a render genuinely running longer than
+  `FUSE_MOTION_RENDER_TTL_MS` no longer blocks a concurrent admission, so the
+  master cap can be exceeded in that case (the late finisher still counts
+  against the budget once it settles). Increase `FUSE_MOTION_RENDER_TTL_MS`
+  if your renders are long.
 - Changes made by another session that never observes the project are caught
   only at the next hook of a session that does.
 - G2 hashes the draft, not the sources it was rendered from.
@@ -236,7 +288,12 @@ B = store write denied; C = approval prompt recorded; D = render allowed in a ne
 
 Cursor `afterFileEdit` is post-write and cannot block: the measured response
 is `{}`; motion blocks writes through `preToolUse`. G2, critic lifecycle and
-budget parity are not established by A–D. Native routing source: [`host.ts`](../src/runtime/motion/host.ts).
+budget parity are not established by A–D. gemini-cli `AfterAgent` fires both
+for the main agent and for subagents (`agent_name` is set only for a
+subagent, and only on versions carrying PR #25033); it releases no
+reservation at all — no host releases anything on the main turn's Stop, and
+the SubagentStop release is restricted to claude-code.
+Native routing source: [`host.ts`](../src/runtime/motion/host.ts).
 Prompt/post-tool notices use native response adapters. Kimi's `tool_call_id`
 is used as its native call id. Sources: [`prompt.ts`](../src/runtime/motion/prompt.ts),
 [`post.ts`](../src/runtime/motion/post.ts),

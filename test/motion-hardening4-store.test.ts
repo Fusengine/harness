@@ -49,10 +49,10 @@ test("private key publication ignores restrictive umask", () => {
   } finally { process.umask(old); }
 });
 
-test("matching failure releases cap without counting; age alone never releases", () => {
+test("matching failure releases cap without counting; a fresh reservation never expires early", () => {
   const { root, home } = fixture(), env = { FUSE_MOTION_MAX_MASTER_RENDERS: "1" };
   expect(openRender(root, "one", "master", 1, home, env)).toBeNull();
-  expect(openRender(root, "two", "master", 1e15, home, env)?.kind).toBe("block");
+  expect(openRender(root, "two", "master", 1 + 1_800_000, home, env)?.kind).toBe("block"); // age == TTL: still fresh
   expect(releaseRender(root, "wrong", home).inflight.one).toBeDefined();
   expect(releaseRender(root, "one", home)).toEqual({ renders: {}, wallMs: {}, inflight: {} });
   expect(openRender(root, "two", "master", 1e15, home, env)).toBeNull();
