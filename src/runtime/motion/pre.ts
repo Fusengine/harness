@@ -145,6 +145,22 @@ export function motionPre(id: string, call: MotionCall, opts: HandleOptions, res
     pruned = true;
   }
   if (pruned) refreshMotionState(state, home);
+  // Idempotent re-delivery: a host with native ids may deliver the SAME
+  // PreToolUse twice (same tool_use_id, e.g. a retry of the same tool call).
+  // When that id already owns a FRESH reservation and its receipt matches
+  // session, stage and command, the second pass replays the first verdict
+  // (the same "Motion render" note) without a new reservation — budget and
+  // state stay byte-identical. Any mismatch (other command/session/stage) or
+  // an id present only in `expired` falls through to the existing refusals; a
+  // `noid:` id derives from session+command, so a repeat is indistinguishable
+  // from a real second call and stays refused below.
+  const toolId = event.toolUseId;
+  const receipt = toolId ? state.renders[toolId] : undefined;
+  if (toolId && !toolId.startsWith("noid:") && Object.hasOwn(live, toolId)
+    && receipt?.session === event.sessionId && receipt.stage === stage && receipt.command === command) {
+    const replay: Prompt = { kind: "inform", title: "Motion render", reason: budgetLine(loadBudget(project.root, home)) };
+    return respond(id, replay, respondAs);
+  }
   if (Object.entries(state.renders).some(([id, entry]) => entry.stage === stage && Object.hasOwn(live, id))) {
     return respond(id, { kind: "block", title: "Motion concurrent render", reason: "A render of this protected stage is still active (includes in-flight reservations); concurrent writers to the same outputs cannot be safely attributed." }, respondAs);
   }
