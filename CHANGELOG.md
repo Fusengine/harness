@@ -4,6 +4,16 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.108] - 2026-10-12
+
+### Changed
+
+- **inject: per-recipient session registry — Claude Code hook injections delivered in full** (`src/runtime/inject-session/`, `src/runtime/handle.ts`, `src/runtime/lifecycle/dispatch.ts`, `src/runtime/pre-allow.ts`, `src/cli/rdv/follower.ts`) — blocks are chunked under 9 500 chars (no 2 KB preview truncation), the loader copy owns each block, true duplicates are trimmed and the per-prompt recall is kept; the registry is removed on SessionEnd; pre-tool lessons fire once per session/sub-agent. Codex, Cursor, Kimi and Gemini output is byte-identical. Tests: `inject-session-*`.
+
+### Added
+
+- **lessons: the harness asks for lessons in caveman style** (`src/runtime/lifecycle/lessons/reminder.ts`, `src/runtime/lifecycle/lessons/dispatch.ts`) — the Stop reminder and the per-prompt lessons suffix ask for telegraphic bullets that never drop not/never/no/only and keep commands, paths and numbers verbatim. `MEMORY/LESSON.md` compacted to caveman style, triggers unchanged. Golden fixture `inform-matrix` updated for the new suffix.
+
 ## [0.1.107] - 2026-10-12
 
 ### Added
