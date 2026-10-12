@@ -1,4 +1,5 @@
 import { CMD } from "./bash-command-anchor";
+import { perlCarriesInPlace } from "./bash-write-perl";
 
 export {
   RUBY_WRITES, JS_RUNTIME_WRITES, INLINE_JS_ANCHOR, INLINE_JS_STDIN_ANCHOR, PERL_E_ANCHOR, PERL_WRITES,
@@ -41,10 +42,14 @@ export const CODE_FILE_LITERAL: RegExp = new RegExp(`\\.(?:${CODE_EXT})\\b`, "i"
  * {@link CMD}-anchored (start/separator + optional wrapper chain); only the
  * structural heredoc-into-file motif is position-free.
  */
-export const CODE_MUTATORS: readonly { re: RegExp; desc: string }[] = [
+export const CODE_MUTATORS: readonly (
+  | { re: RegExp; desc: string; matches?: undefined }
+  | { matches: (cmd: string) => boolean; desc: string; re?: undefined }
+)[] = [
   { re: new RegExp(`${CMD}python3?\\s+-\\s*<<`), desc: "Python heredoc input" },
   { re: new RegExp(`${CMD}sed\\b[^|]*\\s-i`), desc: "sed in-place edit" },
-  { re: new RegExp(`${CMD}perl\\b[^|]*\\s-[pi]i?\\b`), desc: "perl in-place edit" },
+  // ae977a9's verdict, except for the narrow spec in bash-write-perl.ts (which owns the legacy regex).
+  { matches: perlCarriesInPlace, desc: "perl in-place edit" },
   { re: new RegExp(`${CMD}awk\\b[^|]*-i\\s*inplace`), desc: "awk in-place edit" },
   // `patch` as a command token (start/separator + optional wrapper chain), then a
   // metachar/space/EOL. Never the bare word merely NAMING a path in a read-only

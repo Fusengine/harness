@@ -80,7 +80,7 @@ export function bashWriteGuard(ctx: GuardContext): Prompt | null {
   const unquoted = unquotedShellText(cmd);
   const redirects = shellOutputRedirects(cmd).filter((redirect) => redirect.target !== "/dev/null");
 
-  const mutator = CODE_MUTATORS.find((m) => m.re.test(cmd));
+  const mutator = CODE_MUTATORS.find((m) => (m.matches ? m.matches(cmd) : m.re.test(cmd)));
   if (mutator) return blockCodeWrite(`${mutator.desc} — Use Edit/Write tools instead`);
   if (CODE_COMMAND_WRITE.test(cmd)) return blockCodeWrite("tee/dd into a code file — Use Edit/Write tools instead");
   if (PYTHON_C_ANCHOR.test(cmd) && PYTHON_WRITES.test(cmd)) {

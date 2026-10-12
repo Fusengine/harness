@@ -108,8 +108,8 @@ export const INLINE_JS_STDIN_ANCHOR: RegExp = new RegExp(
  * PLUS modern features (`say`, `state`, etc.) and clusters the same way
  * (`-nE`, `-plE`), so a bare-case check let `perl -E '...'` slip past
  * unanchored. Fires on script content this static check CAN inspect. The
- * existing unconditional `perl -[pi]i?` CODE_MUTATORS entry (in-place edit)
- * is untouched and stays a separate, always-block motif.
+ * CODE_MUTATORS "perl in-place edit" entry (perlCarriesInPlace,
+ * bash-write-perl.ts) stays a separate motif, checked before this one.
  */
 export const PERL_E_ANCHOR: RegExp = new RegExp(`${CMD}perl\\s+-[a-zA-Z]*[eE]\\b`);
 
