@@ -17,6 +17,7 @@ import { resolveDesignCacheDir } from "./design-cache-resolve";
 import { resyncCodexAgents } from "./lifecycle/codex-resync/resync";
 import { resetFragmentRegistry } from "./fragment-registry";
 import { attachBudgetRecap } from "./inject-budget-recap";
+import { applySessionRegistry } from "./inject-session/apply";
 import { promptText } from "./prompt-text";
 import { handleConfirmSubmit } from "./confirm/confirm-submit";
 import { submitCodexConfirmation } from "./confirm/codex-confirm";
@@ -138,6 +139,9 @@ async function handleHookCore(id: string, payload: Record<string, unknown>, opts
  */
 export async function handleHook(id: string, payload: Record<string, unknown>, opts: HandleOptions): Promise<HandleOutcome> {
   const outcome = await handleHookCore(id, payload, opts);
+  // Claude Code only: every injected block reaches the model once per session (inject-session/); other hosts untouched.
+  // `motion` is excluded: its UserPromptSubmit text answers THIS prompt (approval feedback), it is not a static block.
+  if (id === "claude-code" && opts.scope !== "motion") return applySessionRegistry(outcome, payload, opts);
   if (id !== "cursor") return outcome;
   const eventName = rawEventName(payload);
   const cursorEvent = normalizeEvent(id, payload);

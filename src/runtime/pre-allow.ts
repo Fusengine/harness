@@ -12,6 +12,7 @@ import { lessonFor } from "../policy/lessons/lesson-gate";
 import { lessonsFileFor } from "./lifecycle/lessons/state";
 import { projectRoot } from "../util/project-root";
 import { oncePerWindow } from "./inject-dedup";
+import { sessionLessonOnce } from "./inject-session/lesson-once";
 import { defaultStateDir } from "./paths";
 import { isApexScoped } from "./gate-helpers";
 import { REQUIRED_AGENTS, DEFAULT_WINDOW_MS } from "./gate";
@@ -81,7 +82,9 @@ export async function allowOutcome(
     url: typeof event.input.url === "string" ? event.input.url : "", phase: "pre",
     corpusMissing: agentId !== "" && (corpusRoot ?? resolveCorpusRoot()) === "",
   }, mcpDir);
-  const lesson = lessonFor(event.tool, event.input, { file: lessonsFileFor(projectRoot(cwd)), once: oncePerWindow });
+  // Claude Code: once per session/sub-agent (the shared-JSON window was pruned by short-window callers); other hosts keep oncePerWindow.
+  const once = id === "claude-code" && process.env.CLAUDE_PROJECT_DIR ? sessionLessonOnce(event.sessionId, agentId, cwd, undefined, oncePerWindow) : oncePerWindow;
+  const lesson = lessonFor(event.tool, event.input, { file: lessonsFileFor(projectRoot(cwd)), once });
   const evidenceNotice = evidence ? await freshEvidenceNotice(event, evidence, cwd) : null;
   if (lesson) {
     const userMessage = [notice?.userMessage, evidenceNotice].filter(Boolean).join("\n") || undefined;
