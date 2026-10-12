@@ -1,5 +1,6 @@
 import { evaluateApex, PRE_AUTH_GATES, POST_AUTH_GATES, type ApexContext } from "../policy/apex";
 import { apexAuthorizationGate } from "../policy/apex-authorization";
+import { listAllMissing } from "../policy/apex-missing";
 import { isTrivialEdit, protectedPathGate, SKIP_DIRS } from "../policy/trivial-edits";
 import { FAIL_CLOSED } from "../policy/guards";
 import { agentsFresh, recordTarget, recordTrivialEdit, trivialCount, type SessionTrack } from "../tracking/session-state";
@@ -112,7 +113,8 @@ export async function apexScopedGate(input: GateInput, track: SessionTrack, wind
   try {
     // (4) Brainstorm + explore/research freshness (pre-existing harness gates; neither reads refs).
     const pre = evaluateApex(ctx, PRE_AUTH_GATES);
-    if (pre) return pre;
+    // The refs stay unloaded on a PRE block (lazy contract, src/refs/lazy.ts): only the ref-free gates are listed alongside it. Nothing is written.
+    if (pre) return listAllMissing(pre, ctx, false);
   } catch {
     return FAIL_CLOSED;
   }
@@ -124,10 +126,11 @@ export async function apexScopedGate(input: GateInput, track: SessionTrack, wind
     if (authDeny) {
       const set_at = new Date(input.now).toISOString();
       await withTrack(input.trackFile, (fresh) => recordTarget(fresh, { project: input.cwd ?? "", framework: input.framework, set_by: "apex-authorization", set_at }));
-      return authDeny;
+      return listAllMissing(authDeny, ctx, true);
     }
     // (6) Check 2 (doc consulted once per session) + SOLID refs.
-    return evaluateApex(ctx, POST_AUTH_GATES);
+    const post = evaluateApex(ctx, POST_AUTH_GATES);
+    return post && listAllMissing(post, ctx, true);
   } catch {
     return FAIL_CLOSED;
   }

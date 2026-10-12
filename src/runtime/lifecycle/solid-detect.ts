@@ -1,5 +1,8 @@
 import { appendFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { MAX_LINES_ENV_KEY } from "../../config/limits";
+import { parseEnvInt } from "../../config/env";
+import { detectExtraProfile } from "./solid-detect-extra";
 
 /** A SOLID project profile: type label, per-file line limit, interface dir. */
 export interface SolidProfile {
@@ -34,7 +37,7 @@ export function detectSolidProfile(projectDir: string): SolidProfile {
       return { type: "swift", limit: 150, ifaceDir: "Protocols" };
     }
   } catch { /* unreadable dir */ }
-  return { type: "unknown", limit: 100, ifaceDir: "" };
+  return detectExtraProfile(projectDir) ?? { type: "unknown", limit: 100, ifaceDir: "" };
 }
 
 /**
@@ -45,7 +48,9 @@ export function detectSolidProfile(projectDir: string): SolidProfile {
  * @returns The plain-text stdout line (possibly empty).
  */
 export function solidDetectStart(env: Record<string, string | undefined> = process.env): string {
-  const profile = detectSolidProfile(env.CLAUDE_PROJECT_DIR ?? ".");
+  const detected = detectSolidProfile(env.CLAUDE_PROJECT_DIR ?? ".");
+  // Owner ceiling wins when set and valid (same parser as limits.ts); else the profile default.
+  const profile = { ...detected, limit: parseEnvInt(env[MAX_LINES_ENV_KEY], detected.limit) };
   const envFile = env.CLAUDE_ENV_FILE ?? "";
   if (envFile) {
     try {
