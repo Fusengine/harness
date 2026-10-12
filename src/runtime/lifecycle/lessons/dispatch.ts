@@ -55,7 +55,7 @@ function injectMemory(cwd: string, event: string, now: number, id: string): stri
   const { content: curated, archive, report } = curateLessons(content, now, root);
   if (curated !== content) content = persistCuration(file, root, curated, archive, content);
   const body = capFragment("lessons", compressInjection(content));
-  const ctx = `Project lessons — never reproduce these:\n${body}\nYou may append OR refine/merge/dedupe bullets in MEMORY/LESSON.md — keep it terse.`;
+  const ctx = `Project lessons — never reproduce these:\n${body}\nYou may append OR refine/merge/dedupe bullets in MEMORY/LESSON.md — caveman style: telegraphic, no filler, never drop not/never/no/only, keep commands/paths/numbers verbatim.`;
   const notice = report ? `lessons injected\nLESSON.md curation:\n${report}` : "lessons injected";
   return renderInform(id, event, ctx, notice);
 }

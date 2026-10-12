@@ -23,6 +23,7 @@ import { prdSubagentContext, prdSubagentStopGate, prdStopGate } from "../prd";
 import { joinContextResponses } from "../../policy/prd";
 import { sanitizeSessionId } from "../home-state";
 import { defaultStateDir, trackFile } from "../paths";
+import { injectStateDir, removeSessionScopes } from "../inject-session/registry";
 
 /** Which plugin's hooks.json invoked the harness (selects SessionStart behavior). */
 export type PluginScope = "core" | "solid" | "rules" | "carto" | "security" | "changelog" | "aipilot" | "lessons" | "seo" | "memory" | "tailwindcss" | "motion";
@@ -114,9 +115,14 @@ export function dispatchLifecycle(input: LifecycleInput): string | null {
       return input.scope === "core" ? postCompactContext(input.payload, input.cwd, import.meta.url, input.now, input.id ?? "claude-code") : "";
     case "PreCompact":
       return saveApexState(input.cwd, input.now, input.id ?? "claude-code");
-    case "SessionEnd":
+    case "SessionEnd": {
       if (input.scope !== "aipilot") cleanupSession(undefined, input.now);
+      // Claude Code: drop this session's once-per-session registry (inject-session/); other hosts never create one.
+      // Sanitized id: scopes are created under it, so a padded raw id would miss them.
+      const sid = sanitizeSessionId(input.payload.session_id);
+      if ((input.id ?? "claude-code") === "claude-code" && sid) removeSessionScopes(injectStateDir(input.cwd), sid);
       return "";
+    }
     case "InstructionsLoaded":
       validateRulesLoaded(input.payload);
       return "";

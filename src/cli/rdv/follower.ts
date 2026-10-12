@@ -13,6 +13,7 @@
 import { mkdirSync, renameSync, rmSync } from "node:fs";
 import { ageMs, eventKey, exists, pidAlive, readText, sleepSync, tryExclusive, tryExclusiveWith, writeAtomic } from "./fs";
 import { layout, regName } from "./layout";
+import { registrationEnv } from "../../runtime/inject-session/loader-child";
 import type { RdvContext, RdvOutcome, Registration, ResultFile, UnitResult } from "./types";
 
 /** Runs the leader loop; resolves to the leader's OWN result. Injected by the caller. */
@@ -97,7 +98,7 @@ export async function rendezvous(ctx: RdvContext, lead: LeadFn): Promise<RdvOutc
     if (!enterDir(ctx, dir)) return { kind: "standalone", why: "late-or-dead" };
     const isLeader = tryExclusiveWith(layout.leader(dir), `${process.pid}:${Date.now()}`);
     const name = regName();
-    const reg: Registration = { id: ctx.id, scopeArg: ctx.scopeArg, pid: process.pid, env: ctx.env };
+    const reg: Registration = { id: ctx.id, scopeArg: ctx.scopeArg, pid: process.pid, env: registrationEnv(ctx.id, ctx.env) };
     writeAtomic(layout.reg(dir, name), JSON.stringify(reg));
     if (isLeader) {
       const own = await lead(ctx, dir, name);

@@ -44,8 +44,11 @@ function reminderText(pending: string[]): string {
   return `Before ending: if this session hit a mistake/blocker worth never ` +
     `reproducing, append 1-3 COMPACT bullets OR sharpen/merge existing ones ` +
     `(format \`- [${stamp}] what went wrong → do instead\`, use exactly this ` +
-    `timestamp) in each project's lessons file below. Skip if nothing ` +
-    `notable.\n${targets}`;
+    `timestamp) in each project's lessons file below. Write bullets in ` +
+    `caveman style: telegraphic English, no articles/filler, fragments, ` +
+    `symbols (→ = + ×), never drop not/never/no/only, keep ` +
+    `commands/paths/numbers/identifiers verbatim. ` +
+    `Skip if nothing notable.\n${targets}`;
 }
 
 /**
