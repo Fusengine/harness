@@ -4,6 +4,22 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.107] - 2026-10-12
+
+### Added
+
+- **apex: the deny lists every missing prerequisite at once** (`src/policy/apex-missing.ts`, `src/runtime/gate-apex.ts`) — instead of stopping at the first failing gate, the deny now lists all missing prerequisites; the PRE-block lists only ref-free gates and never loads refs. Same block/allow verdict, same title; a single failure is byte-identical to before. Tests: `apex-deny-all-missing`.
+- **solid: detect react, tanstack-start, astro, java, csharp, ruby and generic projects; the limit follows `FUSE_SOLID_MAX_LINES`** (`src/runtime/lifecycle/solid-detect.ts`, `solid-detect-extra.ts`) — only projects previously typed "unknown" get a type. `SOLID_FILE_LIMIT` = `FUSE_SOLID_MAX_LINES` when set, else the profile default; output with the variable unset is unchanged. Tests: `solid-detect-stacks`.
+
+### Fixed
+
+- **guards: the perl timeout idiom and pure reads no longer hit "perl in-place edit"** (`src/policy/guards/bash-write.ts`, `bash-write-patterns.ts`, `bash-write-inline.ts`, `bash-write-perl.ts`, `bash-write-perl-words.ts`) — verdict identical to 0.1.106 except two exemptions: pure-read programs whose `-p`/`-i` tokens are file names or program text, and `perl -e 'alarm N; exec @ARGV'` with a bare claude/codex/kimi/cursor/cursor-agent child (the existing exec CONFIRM still applies). 1387-command differential with real perl under 8 shells: 0 in-place edit loosened, 0 stricter. Tests: `bash-write-perl-inplace`, `bash-write-perl-narrow`.
+
+### Known limits
+
+- The perl rule keeps 0.1.106's existing gaps (e.g. `/usr/bin/perl -pi`, `bash -c "perl -pi …"`), deliberately unchanged.
+- `test/multi-rdv-sim` scenario 01 can fail when `TMPDIR` is set (pre-existing, same on 0.1.106).
+
 ## [0.1.106] - 2026-10-11
 
 ### Fixed
