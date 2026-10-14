@@ -4,6 +4,12 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.109] - 2026-10-14
+
+### Fixed
+
+- **motion: key-word heuristic no longer blocks unrelated commands** (`src/policy/motion/guard-key.ts`) — the Motion signing key guard fired in every session with fuse-motion enabled on any command containing the word "key" next to `$ * ? [` (python lambdas, SQL columns, ssh scripts). That branch protected nothing a simple glob variant did not already bypass and is removed; the glob/variable + `.fuse-har` heuristic and every path-based protection of the signing key directory are unchanged. Tests: `motion-key-word-rule`.
+
 ## [0.1.108] - 2026-10-12
 
 ### Changed

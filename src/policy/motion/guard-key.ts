@@ -44,7 +44,7 @@ export function motionKeyViolation(event: NormalizedEvent, cwd: string, home: st
     if (!name) return false;
     if (name.includes(MOTION_KEY_FRAGMENT) || /\.fuse-harness\/motion[*?\[]/.test(name)) return true;
     if (/\.fuse-harness\/(?:[*?\[]|$)/.test(name)) return true;
-    if (/[$*?[]/.test(name) && /(?:\.fuse-har|\bkeys?\b)/.test(name)) return true;
+    if (/[$*?[]/.test(name) && /\.fuse-har/.test(name)) return true;
     const path = canonicalFilePath(homePath(name, cwd, home));
     return isUnder(path, directory) || ((/grep|glob|search/i.test(event.tool) || MOTION_WRITE_TOOLS.has(event.tool)) && isUnder(directory, path));
   });
