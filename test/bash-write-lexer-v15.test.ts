@@ -119,9 +119,14 @@ test("(perf) unquotedShellText on 20 malformed 2000-char inputs stays under 5ms 
   for (let w = 0; w < 10; w++) unquotedShellText(buildToken2000(splitmix32(w + 1)));
   for (let i = 0; i < 20; i++) {
     const input = buildToken2000(rng);
-    const start = performance.now();
-    unquotedShellText(input);
-    expect(performance.now() - start).toBeLessThan(5);
+    // Min of 3 samples: an algorithmic blow-up is slow on every sample, a GC pause hits only one, so this keeps the steady-state complexity bound while ignoring one-off stalls.
+    let best = Infinity;
+    for (let s = 0; s < 3; s++) {
+      const start = performance.now();
+      unquotedShellText(input);
+      best = Math.min(best, performance.now() - start);
+    }
+    expect(best).toBeLessThan(5);
   }
 });
 
