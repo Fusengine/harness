@@ -4,6 +4,12 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.110] - 2026-10-14
+
+### Changed
+
+- **test(perf): `unquotedShellText` perf check timed as min of 3 samples** (`test/bash-write-lexer-v14.test.ts`, `test/bash-write-lexer-v15.test.ts`) — the 0.1.109 npm publish failed 3 times on GitHub runners (6.0 / 5.85 / 7.3 ms vs the 5 ms budget) with unchanged code: one GC pause or noisy neighbour failed the single-sample check. Min-of-3 keeps the 5 ms bound (an algorithmic blow-up is slow on every sample) and ignores one-off stalls. Budget, warmup, seeds and inputs unchanged. 0.1.110 also ships the 0.1.109 motion fix, which never reached npm.
+
 ## [0.1.109] - 2026-10-14
 
 ### Fixed
