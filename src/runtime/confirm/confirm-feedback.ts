@@ -34,6 +34,27 @@ function truncate(text: string, max: number): string {
 }
 
 /**
+ * Render a stored command on ONE line: every control char (U+0000–U+001F,
+ * U+007F–U+009F, incl. NEL U+0085) and U+2028/U+2029 becomes a visible escape (`\n`, `\r`, `\t`, else
+ * `\uXXXX`), so a crafted command can never forge a second ack line. A command
+ * without such characters is returned unchanged. Built from char codes: a
+ * literal U+2028/U+2029 in a regex source would end the line.
+ * @param command - The stored command.
+ */
+export function oneLineCommand(command: string): string {
+  let out = "";
+  for (const c of command) {
+    const n = c.charCodeAt(0);
+    if (c === "\n") out += "\\n";
+    else if (c === "\r") out += "\\r";
+    else if (c === "\t") out += "\\t";
+    else if (n <= 0x1f || (n >= 0x7f && n <= 0x9f) || n === 0x2028 || n === 0x2029) out += `\\u${n.toString(16).padStart(4, "0")}`;
+    else out += c;
+  }
+  return out;
+}
+
+/**
  * Render the feedback line for one CONFIRM outcome. "" for a refusal (silent,
  * as before) — every other outcome names the code and, when relevant, the
  * command it armed or the codes still pending.
@@ -41,7 +62,12 @@ function truncate(text: string, max: number): string {
 export function confirmFeedbackText(outcome: ConfirmSubmitOutcome, pendings: readonly ConfirmPendingLine[]): string {
   switch (outcome.kind) {
     case "armed":
+      // Codex asks the agent to rerun NOW (the 2026-10-29 incident: it never reran inside the TTL).
+      // The full command is shown untruncated but on one line (control chars escaped, see oneLineCommand).
+      if (outcome.rerun) return `[fuse-harness] CONFIRM ${outcome.code} accepté — relance maintenant exactement : ${oneLineCommand(outcome.command) || "(commande non enregistrée)"} (valide 5 min)`;
       return `[fuse-harness] CONFIRM ${outcome.code} accepté pour : ${truncate(outcome.command || "(commande non enregistrée)", 60)} (valable 5 min)`;
+    case "already-consumed":
+      return `[fuse-harness] CONFIRM ${outcome.code} déjà utilisé : l'action a déjà été exécutée — si elle est de nouveau refusée, un nouveau code sera donné.`;
     case "unknown-code": {
       const list = pendings.map((p) => `${p.code} (${truncate(p.command || "(commande non enregistrée)", 40)})`).join(" · ");
       return `[fuse-harness] CONFIRM ${outcome.code} inconnu — codes en attente : ${list || "aucun"}`;

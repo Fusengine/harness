@@ -74,7 +74,7 @@ test("codex: an accepted CONFIRM rides the additionalContext envelope", async ()
   const out = await handleHook("codex", submit(s, `CONFIRM ${code}`), { ...opts, now: 1100 });
   const j = JSON.parse(out.stdout) as { hookSpecificOutput?: { hookEventName?: string; additionalContext?: string } };
   expect(j.hookSpecificOutput?.hookEventName).toBe("UserPromptSubmit");
-  expect(j.hookSpecificOutput?.additionalContext).toContain(`[fuse-harness] CONFIRM ${code} accepté pour : ${cmd} (valable 5 min)`);
+  expect(j.hookSpecificOutput?.additionalContext).toContain(`[fuse-harness] CONFIRM ${code} accepté — relance maintenant exactement : ${cmd} (valide 5 min)`);
 });
 
 test("codex: an unknown code answers 'inconnu' instead of staying silent", async () => {
