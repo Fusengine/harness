@@ -14,6 +14,7 @@ test("12: shared writer tools include canonical apply_patch", () => {
   expect([...MOTION_WRITE_TOOLS]).toEqual(["Write", "Edit", "MultiEdit", "NotebookEdit", "apply_patch"]);
 });
 test("12: protected fragment retains its exact trailing-slash behavior", () => {
-  expect(`${MOTION_STORE_FRAGMENT}/`).toBe(".fuse-harness/motion/");
-  expect(PROTECTED_FRAGMENTS.filter((s) => s.includes("motion"))).toEqual([".fuse-harness/motion/", ".fuse-harness/motion-keys/"]);
+  expect(`${MOTION_STORE_FRAGMENT}/`).toBe(".fuse-harness/video-motion/");
+  // video-motion + its keys child, then the legacy (pre-relocation) store and keys, kept for a leftover old directory.
+  expect(PROTECTED_FRAGMENTS.filter((s) => s.includes("motion"))).toEqual([".fuse-harness/video-motion/", ".fuse-harness/video-motion/keys/", ".fuse-harness/motion/", ".fuse-harness/motion-keys/"]);
 });

@@ -4,6 +4,16 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.111] - 2026-10-30
+
+### Fixed
+
+- **confirm: Codex CONFIRM resubmission and wrapped codes** (`src/runtime/confirm/codex-confirm.ts`, `confirm-feedback.ts`, `confirm-outcome.ts`, `confirm-typed-code.ts`) — a resubmitted, already-armed code now returns "armed" instead of a false "unknown"; a receipt-only code returns "already-consumed"; a whole-message markdown/quote-wrapped `CONFIRM xxxx` is accepted; the ack reads "accepté — relance maintenant exactement : <cmd> (valide 5 min)" with control characters escaped onto one line. Tests: `confirm-codex-resubmit`, `confirm-feedback`.
+
+### Changed
+
+- **motion: all Motion data relocated to `~/.fuse-harness/video-motion/`** (`src/policy/motion/store.ts`, `migrate.ts`, `guard-key.ts`, `guard-key-patterns.ts`, `self-approval.ts`, `src/policy/guards/protected-path.ts`, `src/runtime/motion/index.ts`) — approvals, state, critic flags and `banned.txt` stay under `video-motion/` with the same layout; signing keys move to `video-motion/keys/` (was `~/.fuse-harness/motion-keys/`). The Motion guards now key on `video-motion` instead of the whole `~/.fuse-harness/` directory, so ordinary harness commands (`ls ~/.fuse-harness/`, `cat ~/.fuse-harness/cache/*/x.json`, a `$f` pointing at `cache/sessions/...` with `jq '.pending[]'`) are no longer blocked as "Motion signing key guard" in sessions with fuse-motion enabled. The old layout is moved on first resolve with `rename(2)` (contents and modes preserved, never deleted or overwritten, race-safe across parallel hook processes; if both layouts exist the new one wins); the old fragments stay in the literal blocklists so a leftover old directory is still protected. In-flight approvals are re-verified once against the registry after the move (fail-closed). Tests: `motion-video-motion`; pre-existing motion tests changed only by path substitution (plus three owner-requested verdicts: `ls ~/.fuse-harness/`, `cat ~/.fuse-harness/cache/*/x.json` and the `$f`/jq command are now allowed).
+
 ## [0.1.110] - 2026-10-14
 
 ### Changed

@@ -73,7 +73,7 @@ function lockedMotionHook(id: string, payload: Record<string, unknown>, event: N
     kind = call.kind;
     respondAs = call.respondAs;
     protectedPre = call.kind === "pre" && protectedMotionDirectory(opts.cwd, opts.home ?? homedir());
-    if (call.kind === "pre" && /\.fuse-harness|\.motion/.test([call.event.filePath, call.event.command].join(" "))) protectedPre = true;
+    if (call.kind === "pre" && /video-motion|\.motion/.test([call.event.filePath, call.event.command].join(" "))) protectedPre = true;
     const home = opts.home ?? homedir();
     const states = sessionMotionStates(event.sessionId, home);
     const project = commandMotionProject(call.event.command, opts.cwd, home);

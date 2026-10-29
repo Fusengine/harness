@@ -8,7 +8,7 @@ import { normalizeEvent } from "../src/runtime/normalize";
 
 const root = mkdtempSync(join(tmpdir(), "motion-guard3-"));
 mkdirSync(join(root, ".motion"));
-mkdirSync(join(root, ".fuse-harness", "motion"), { recursive: true });
+mkdirSync(join(root, ".fuse-harness", "video-motion"), { recursive: true });
 symlinkSync(join(root, ".fuse-harness"), join(root, "alias"));
 test("2 store alias paths are canonicalized", () => {
   expect(selfApprovalViolation("Write", join(root, "alias/motion/K/approvals.json"), undefined)).not.toBeNull();

@@ -44,7 +44,7 @@ test("HMAC: human grant signs canonical project/artifact/hash/time and tampering
 test("HMAC: unreadable or over-permissive key never unlocks a gate", () => {
   const f = fixture(), pending = listPending(f.root, f.home)[0]!;
   grantPending(f.root, "session", "stills", pending.code, pending.sha256, 200, f.home);
-  const key = join(f.home, ".fuse-harness", "motion-keys", `${rootKey(f.root)}.key`);
+  const key = join(f.home, ".fuse-harness", "video-motion", "keys", `${rootKey(f.root)}.key`);
   expect(readFileSync(key).byteLength).toBeGreaterThanOrEqual(32);
   chmodSync(key, 0o644);
   expect(f.gate()?.reason).toContain("re-approve required");
@@ -53,7 +53,7 @@ test("HMAC: unreadable or over-permissive key never unlocks a gate", () => {
 test("HMAC: gates do not generate missing keys and reject symlink or replaced keys", () => {
   const f = fixture(), pending = listPending(f.root, f.home)[0]!;
   grantPending(f.root, "session", "stills", pending.code, pending.sha256, 200, f.home);
-  const path = join(f.home, ".fuse-harness", "motion-keys", `${rootKey(f.root)}.key`);
+  const path = join(f.home, ".fuse-harness", "video-motion", "keys", `${rootKey(f.root)}.key`);
   const key = readFileSync(path), elsewhere = join(f.home, "elsewhere");
   unlinkSync(path);
   expect(f.gate()?.reason).toContain("re-approve required");

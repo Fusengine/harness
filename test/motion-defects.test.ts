@@ -16,7 +16,7 @@ afterEach(() => {
   delete process.env["FUSE_MOTION_MAX_MASTER_RENDERS"];
 });
 
-const store = (fx: MotionFixture): string => join(fx.home, ".fuse-harness", "motion");
+const store = (fx: MotionFixture): string => join(fx.home, ".fuse-harness", "video-motion");
 
 test("D1: motion store is a regular file -> missing approval still denies", async () => {
   const fx = makeFixture();
@@ -43,17 +43,17 @@ test("D2: harness-dir reads and non-store deletes are allowed", () => {
 
 test("D2: store writes, deletes, moves, chmod and interpreters stay blocked", () => {
   const blocked = [
-    "rm -rf ~/.fuse-harness/motion",
-    "rm ~/.fuse-harness/motion/k/approvals.json",
-    "mv /tmp/a ~/.fuse-harness/motion/k/approvals.json",
-    "chmod 777 ~/.fuse-harness/motion/k",
-    "cd ~/.fuse-harness && rm -rf motion",
+    "rm -rf ~/.fuse-harness/video-motion",
+    "rm ~/.fuse-harness/video-motion/k/approvals.json",
+    "mv /tmp/a ~/.fuse-harness/video-motion/k/approvals.json",
+    "chmod 777 ~/.fuse-harness/video-motion/k",
+    "cd ~/.fuse-harness && rm -rf video-motion",
     "rm -rf ~/.fuse-harness",
-    'python3 -c "open(\'/Users/u/.fuse-harness/motion/k/approvals.json\',\'w\')"',
-    "perl -e 'unlink q(/Users/u/.fuse-harness/motion/k/approvals.json)'",
-    'ruby -e "File.write(%q(/u/.fuse-harness/approvals.json),1)"',
-    "sh -c 'echo {} > ~/.fuse-harness/motion/k/approvals.json'",
-    "bun -e 'Bun.write(process.env.HOME+\"/.fuse-harness/Motion/x\",1)'",
+    'python3 -c "open(\'/Users/u/.fuse-harness/video-motion/k/approvals.json\',\'w\')"',
+    "perl -e 'unlink q(/Users/u/.fuse-harness/video-motion/k/approvals.json)'",
+    'ruby -e "File.write(%q(/u/.fuse-harness/video-motion/approvals.json),1)"',
+    "sh -c 'echo {} > ~/.fuse-harness/video-motion/k/approvals.json'",
+    "bun -e 'Bun.write(process.env.HOME+\"/.fuse-harness/Video-Motion/x\",1)'",
   ];
   for (const c of blocked) expect(v("Bash", undefined, c)?.kind).toBe("block");
 });

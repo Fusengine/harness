@@ -89,23 +89,34 @@ cryptographic authentication. Sources: [`gates.ts`](../src/policy/motion/gates.t
 ## Store and anti-forgery
 
 Trusted state lives outside the repository:
-`~/.fuse-harness/motion/<hash(root)>/{approvals,pending,budget}.json`, where
+`~/.fuse-harness/video-motion/<hash(root)>/{approvals,pending,budget}.json`, where
 `hash(root)` is the first 16 hex characters of SHA-256 of the canonical root.
-Critic flags live under `~/.fuse-harness/motion/sessions/<session>.json`.
+Critic flags live under `~/.fuse-harness/video-motion/sessions/<session>.json`.
+All Motion data (store, `banned.txt`, state registry and signing keys) lives under
+`~/.fuse-harness/video-motion/`, so the rest of `~/.fuse-harness/` (cache, sessions,
+lessons) is not touched by any Motion guard. Releases before this layout used
+`~/.fuse-harness/motion/` and `~/.fuse-harness/motion-keys/`; on first resolve the
+harness moves them with `rename(2)` (contents and modes preserved, nothing deleted
+or overwritten; if both layouts exist the new one wins and the old one stays in
+place, still protected for literal paths). In-flight approvals are re-verified
+against the registry once after the move (fail-closed: the owner re-approves if
+the registry no longer matches).
 `.motion/approvals.log` is only a mirror, never an approval source.
 
 Approval records are signed with HMAC-SHA256. The per-project key lives in
-`~/.fuse-harness/motion-keys/<hash(root)>.key` (mode `0600`, created
+`~/.fuse-harness/video-motion/keys/<hash(root)>.key` (mode `0600`, created
 atomically); unsigned or mis-signed records are ignored. The harness keeps its
-own registry under `~/.fuse-harness/motion/state/` (`<hash>.json` state
+own registry under `~/.fuse-harness/video-motion/state/` (`<hash>.json` state
 witnesses and `<hash>.grants.json`, the grants it wrote itself). A key or an
 approval the registry never recorded — for example one planted before the
 harness first observed the project — is not trusted: the owner re-approves.
 
 Write tools and detected Bash writes/destructive operations targeting the
 store or the key directory are denied. The shared path guard protects
-`~/.fuse-harness/motion/` and `~/.fuse-harness/motion-keys/` for **every**
-hook scope, not only `motion`; reads (`cat`, `ls`, `jq`) stay allowed. Bash
+`~/.fuse-harness/video-motion/` (including `keys/`) for **every**
+hook scope, not only `motion`; reads of the store (`cat`, `ls`, `jq`) stay allowed,
+reads of `keys/` do not. Commands on other `~/.fuse-harness/` paths
+(`cache/...`) are never affected by the Motion guards. Bash
 commands containing `MOTION-APPROVE`, and scheduling or messaging tool inputs
 carrying that phrase, are denied to prevent replay through automated prompts.
 Sources: [`store.ts`](../src/policy/motion/store.ts),
@@ -147,7 +158,7 @@ Sources: [`state.ts`](../src/policy/motion/state.ts),
 
 ## Sensitive source data
 
-Keep `~/.fuse-harness/motion/banned.txt` **outside every Git repository**.
+Keep `~/.fuse-harness/video-motion/banned.txt` **outside every Git repository**.
 It contains one banned term per line; blank lines and `#` comments are
 ignored. Matching is case-insensitive with NFC normalization; an absent or
 unreadable list supplies no terms. Currency amounts (`$`, `€`, `£`,

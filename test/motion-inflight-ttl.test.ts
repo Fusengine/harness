@@ -24,7 +24,7 @@ async function runAt(fx: MotionFixture, payload: Record<string, unknown>, now: n
 
 /** The single project budget file created under a home (unit fixtures and hook fixtures alike). */
 function budgetFile(home: string): string {
-  const motion = join(home, ".fuse-harness", "motion");
+  const motion = join(home, ".fuse-harness", "video-motion");
   const dir = readdirSync(motion).find((entry) => /^[0-9a-f]{16}$/.test(entry));
   if (!dir) throw new Error("no project store under " + motion);
   return join(motion, dir, "budget.json");

@@ -5,6 +5,7 @@ import { sanitizeSessionId } from "../home-state";
 import { commandToString } from "../command-string";
 import { displayCodeForAction, hashForAction } from "./confirm-code";
 import { isSubagentActive } from "./confirm-subagent";
+import { typedConfirmCode } from "./confirm-typed-code";
 import type { CodexPromptOrigin } from "./codex-prompt-origin";
 import type { ConfirmSubmitOutcome } from "./confirm-outcome";
 import {
@@ -119,7 +120,7 @@ export function submitCodexConfirmation(
   const sid = sanitizeSessionId(sessionIdRaw);
   if (!sid) return null;
   const refusal = /\b(non|no|stop|annule|cancel|abort|nope|laisse tomber|pas maintenant)\b/i.test(text);
-  const typedCode = text.trim().match(/^confirm[ _-]*([0-9a-f]{4})$/i)?.[1];
+  const typedCode = typedConfirmCode(text);
   try {
     const outcome = withTrackLockSync(codexConfirmLockDir(sid, home), (): ConfirmSubmitOutcome | null => {
       const buckets = loadCodexConfirmState(sid, home);
@@ -132,13 +133,22 @@ export function submitCodexConfirmation(
       if (origin === undefined && isSubagentActive(sid, now, home)) return { kind: "frozen", code: typedCode };
       const matches = buckets.pending.filter((p) => p.code.toLowerCase() === typedCode.toLowerCase());
       const chosen = matches[matches.length - 1]; // newest pending wins on a 4-hex collision
-      if (!chosen) return { kind: "unknown-code", code: typedCode };
+      if (!chosen) {
+        // The code left `pending` without this call arming it: a fan-out sibling (or an earlier
+        // identical submission) already did. READ-ONLY lookup — never re-arm, extend or move
+        // anything. A live token wins over a receipt (it is still usable).
+        const same = (a: CodexAction): boolean => a.code.toLowerCase() === typedCode.toLowerCase();
+        const live = buckets.tokens.filter((t) => now - t.ts <= TTL_MS && same(t)).pop();
+        if (live) return { kind: "armed", code: live.code, command: live.command, rerun: true, repeat: true };
+        if (buckets.receipts.some(same)) return { kind: "already-consumed", code: typedCode };
+        return { kind: "unknown-code", code: typedCode };
+      }
       saveCodexConfirmState(sid, {
         pending: buckets.pending.filter((p) => p !== chosen),
         tokens: upsertCodexEntry(buckets.tokens, { ...chosen, ts: now }),
         receipts: buckets.receipts,
       }, home);
-      return { kind: "armed", code: chosen.code, command: chosen.command };
+      return { kind: "armed", code: chosen.code, command: chosen.command, rerun: true };
     });
     return outcome === LOCK_FAILED ? null : outcome;
   } catch {

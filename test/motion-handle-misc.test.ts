@@ -27,7 +27,7 @@ test("a non-critic SubagentStart sets no flag", async () => {
 
 test("self-approval: Write into the motion store is denied, even outside a motion project", async () => {
   const fx = makeFixture();
-  const store = join(fx.home, ".fuse-harness", "motion", "x", "approvals.json");
+  const store = join(fx.home, ".fuse-harness", "video-motion", "x", "approvals.json");
   expect(isDeny(await run(fx, write("w1", store)))).toBe(true);
   expect(isDeny(await run(fx, write("w1", store), "motion", fx.base))).toBe(true);
   expect(isDeny(await run(fx, bash("w1", `echo '{}' > ${store}`)))).toBe(true);
