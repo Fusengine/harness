@@ -31,16 +31,22 @@ test("ALLOW 4 python json keys() slicing", () => {
 });
 
 test("BLOCK 5 literal key file paths", () => {
-  expect(bash("cat ~/.fuse-harness/motion-keys/x.key")).toBe("block");
+  expect(bash("cat ~/.fuse-harness/video-motion/keys/x.key")).toBe("block");
   expect(bash(`cat ${join(keyDir, "x.key")}`)).toBe("block");
 });
 test("BLOCK 6 glob and variable paths to the harness directory", () => {
-  for (const command of ["cat ~/.fuse-har*/motion*/*", "cat $HOME/.fuse-harness/*", "cat ~/.fuse-harness/m*/*", "ls ~/.fuse-harness/"]) {
+  // `ls ~/.fuse-harness/` moved to the allowed set below: the harness root no longer holds Motion data (owner request).
+  for (const command of ["cat ~/.fuse-har*/video-motion*/*", "cat $HOME/.fuse-harness/*", "cat ~/.fuse-harness/v*/*", "ls ~/.fuse-harness/video-motion/"]) {
     expect(bash(command)).toBe("block");
   }
 });
-test("BLOCK 7 variable indirection into the harness directory", () => {
-  expect(bash("D=$HOME/.fuse-harness; cat $D/m*/*")).toBe("block");
+test("ALLOW 6b harness paths that no longer touch Motion data", () => {
+  for (const command of ["ls ~/.fuse-harness/", "cat ~/.fuse-harness/cache/*/x.json", "f=~/.fuse-harness/cache/sessions/x.json; ls -la $f; jq '.pending[]' $f"]) {
+    expect(bash(command)).toBeNull();
+  }
+});
+test("BLOCK 7 variable indirection into the Motion directory", () => {
+  expect(bash("D=$HOME/.fuse-harness/video-motion; cat $D/k*/*")).toBe("block");
 });
 test("BLOCK 8 Read, Grep and Glob tools", () => {
   expect(verdict("Read", { file_path: join(keyDir, "x.key") })).toBe("block");
@@ -49,5 +55,5 @@ test("BLOCK 8 Read, Grep and Glob tools", () => {
 });
 test("BLOCK 9 recursive grep and rg over the harness directory", () => {
   expect(bash("grep -r foo ~/.fuse-harness")).toBe("block");
-  expect(bash("rg foo ~/.fuse-harness/motion-keys")).toBe("block");
+  expect(bash("rg foo ~/.fuse-harness/video-motion/keys")).toBe("block");
 });

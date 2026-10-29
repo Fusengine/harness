@@ -37,12 +37,12 @@ test("stale-session purge excludes symlinks and preserves refreshed current sess
 
 test("private key publication ignores restrictive umask", () => {
   const { root, home } = fixture();
-  mkdirSync(join(home, ".fuse-harness", "motion-keys"), { recursive: true });
+  mkdirSync(join(home, ".fuse-harness", "video-motion", "keys"), { recursive: true });
   const old = process.umask(0o777);
   try {
-    mkdirSync(join(home, ".fuse-harness", "motion-keys"), { recursive: true });
+    mkdirSync(join(home, ".fuse-harness", "video-motion", "keys"), { recursive: true });
     chmodSync(join(home, ".fuse-harness"), 0o700);
-    chmodSync(join(home, ".fuse-harness", "motion-keys"), 0o700);
+    chmodSync(join(home, ".fuse-harness", "video-motion", "keys"), 0o700);
     expect(grantingMotionKey(root, home)).not.toBeNull();
     expect(statSync(motionKeyPath(root, home)).mode & 0o777).toBe(0o600);
     expect(readMotionKey(root, home)).not.toBeNull();

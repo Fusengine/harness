@@ -5,7 +5,7 @@ import { denied, HOSTS, makeFixture, postShell, runHost, shell, silent, userProm
 
 const DRAFT = "bash render.sh --stage draft";
 const code = (out: string): string => out.match(/MOTION-APPROVE stills ([0-9a-f]{4})/)?.[1] ?? "";
-const storeFile = (home: string): string => join(home, ".fuse-harness", "motion", "x", "approvals.json");
+const storeFile = (home: string): string => join(home, ".fuse-harness", "video-motion", "x", "approvals.json");
 
 for (const h of HOSTS) {
   test(`${h}: G1 deny in the native format carries MOTION-APPROVE stills <code>`, async () => {
@@ -22,8 +22,8 @@ for (const h of HOSTS) {
 
   test(`${h}: a banned term written into the source is refused, a clean write passes`, async () => {
     const fx = makeFixture();
-    mkdirSync(join(fx.home, ".fuse-harness", "motion"), { recursive: true });
-    writeFileSync(join(fx.home, ".fuse-harness", "motion", "banned.txt"), "acmecorp\n");
+    mkdirSync(join(fx.home, ".fuse-harness", "video-motion"), { recursive: true });
+    writeFileSync(join(fx.home, ".fuse-harness", "video-motion", "banned.txt"), "acmecorp\n");
     const src = join(realpathSync(fx.proj), "src", "a.ts");
     expect(denied(h, await runHost(fx, h, write(h, "s1", src, "const x = 'AcmeCorp'", fx.proj)))).toBe(true);
     expect(denied(h, await runHost(fx, h, write(h, "s1", src, "const x = 1", fx.proj)))).toBe(false);

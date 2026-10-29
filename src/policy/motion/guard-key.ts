@@ -3,7 +3,8 @@ import { homedir } from "node:os";
 import type { Prompt } from "../../prompt/types";
 import type { NormalizedEvent } from "../../runtime/normalize";
 import { canonicalFilePath } from "../../runtime/prd/prd-canon";
-import { MOTION_KEY_FRAGMENT, motionKeyDirectory } from "./store";
+import { motionKeyDirectory } from "./store";
+import { namesMotionKeys } from "./guard-key-patterns";
 import { isUnder } from "./paths";
 import { MOTION_WRITE_TOOLS } from "./constants";
 import { commandTokens, expansionText } from "./shell-verbs";
@@ -42,9 +43,7 @@ export function motionKeyViolation(event: NormalizedEvent, cwd: string, home: st
   }
   const violation = names.some((name) => {
     if (!name) return false;
-    if (name.includes(MOTION_KEY_FRAGMENT) || /\.fuse-harness\/motion[*?\[]/.test(name)) return true;
-    if (/\.fuse-harness\/(?:[*?\[]|$)/.test(name)) return true;
-    if (/[$*?[]/.test(name) && /\.fuse-har/.test(name)) return true;
+    if (namesMotionKeys(name)) return true;
     const path = canonicalFilePath(homePath(name, cwd, home));
     return isUnder(path, directory) || ((/grep|glob|search/i.test(event.tool) || MOTION_WRITE_TOOLS.has(event.tool)) && isUnder(directory, path));
   });

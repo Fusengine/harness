@@ -26,10 +26,10 @@ test("`.git` scoping: real .git segment blocks, foo.git/.github do not", () => {
   expect(protectedPathGuard({ tool: "Write", filePath: "/x/.github/workflows/ci.yml" })).toBeNull();
 });
 
-test("motion store: .fuse-harness/motion/ blocked on Write AND Bash redirect; cache/x stays allowed", () => {
-  expect(protectedPathGuard({ tool: "Write", filePath: "/h/.fuse-harness/motion/p/approvals.json" })?.kind).toBe("block");
-  expect(protectedPathGuard({ tool: "Bash", command: "echo '{}' > /h/.fuse-harness/motion/p/approvals.json" })?.kind).toBe("block");
-  expect(protectedPathGuard({ tool: "Bash", command: "cat /h/.fuse-harness/motion/p/approvals.json > out.txt" })).toBeNull();
+test("motion store: .fuse-harness/video-motion/ blocked on Write AND Bash redirect; cache/x stays allowed", () => {
+  expect(protectedPathGuard({ tool: "Write", filePath: "/h/.fuse-harness/video-motion/p/approvals.json" })?.kind).toBe("block");
+  expect(protectedPathGuard({ tool: "Bash", command: "echo '{}' > /h/.fuse-harness/video-motion/p/approvals.json" })?.kind).toBe("block");
+  expect(protectedPathGuard({ tool: "Bash", command: "cat /h/.fuse-harness/video-motion/p/approvals.json > out.txt" })).toBeNull();
   expect(protectedPathGuard({ tool: "Write", filePath: "/h/.fuse-harness/cache/x" })).toBeNull();
   expect(protectedPathGuard({ tool: "Bash", command: "echo 1 > /h/.fuse-harness/cache/x" })).toBeNull();
 });

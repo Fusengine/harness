@@ -64,5 +64,5 @@ test("critic rejects dangling output symlinks whose destination does not exist y
 });
 
 test("motion keys are protected for every scope like the approval store", () => {
-  expect(protectedPathGuard({ tool: "Write", filePath: "/tmp/home/.fuse-harness/motion-keys/k.key" })).not.toBeNull();
+  expect(protectedPathGuard({ tool: "Write", filePath: "/tmp/home/.fuse-harness/video-motion/keys/k.key" })).not.toBeNull();
 });

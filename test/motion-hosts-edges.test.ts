@@ -6,7 +6,7 @@ import { bash, codeOf, isDeny, prompt, run } from "./motion-handle-fixture";
 import { denied, makeFixture, runHost, shell, silent, userPrompt } from "./motion-hosts-fixture";
 
 const DRAFT = "bash render.sh --stage draft";
-const STORE = (home: string): string => join(home, ".fuse-harness", "motion", "x", "approvals.json");
+const STORE = (home: string): string => join(home, ".fuse-harness", "video-motion", "x", "approvals.json");
 
 test("claude-code: motion outputs are exactly the Claude builders' bytes (deny, approval, budget)", async () => {
   const fx = makeFixture();
@@ -34,8 +34,8 @@ test("codex apply_patch: the store path anywhere in the patch markers (Add, Upda
 
 test("codex apply_patch: a banned term in an added source file is refused", async () => {
   const fx = makeFixture();
-  mkdirSync(join(fx.home, ".fuse-harness", "motion"), { recursive: true });
-  writeFileSync(join(fx.home, ".fuse-harness", "motion", "banned.txt"), "acmecorp\n");
+  mkdirSync(join(fx.home, ".fuse-harness", "video-motion"), { recursive: true });
+  writeFileSync(join(fx.home, ".fuse-harness", "video-motion", "banned.txt"), "acmecorp\n");
   const body = `*** Add File: ${realpathSync(fx.proj)}/src/a.ts\n+// AcmeCorp`;
   const out = await runHost(fx, "codex", { hook_event_name: "PreToolUse", session_id: "s1", turn_id: "1", tool_use_id: "t", tool_name: "apply_patch", tool_input: { command: `*** Begin Patch\n${body}\n*** End Patch` }, cwd: fx.proj });
   expect(denied("codex", out)).toBe(true);

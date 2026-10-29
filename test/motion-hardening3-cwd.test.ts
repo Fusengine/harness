@@ -10,7 +10,7 @@ import { motionKeyViolation } from "../src/policy/motion/guard-key";
 const home = realpathSync(mkdtempSync(join(tmpdir(), "motion-cwd3-")));
 const root = join(home, "video");
 mkdirSync(join(root, ".motion"), { recursive: true });
-mkdirSync(join(home, ".fuse-harness/motion-keys"), { recursive: true });
+mkdirSync(join(home, ".fuse-harness/video-motion/keys"), { recursive: true });
 symlinkSync(join(home, ".fuse-harness"), join(home, "alias"));
 writeFileSync(join(root, ".motion/project.json"), JSON.stringify({ masters: ["out/master.mp4"], render: "render.sh" }));
 async function run(command: string, cwd = root): Promise<string> {
@@ -31,7 +31,7 @@ test("22 initial project discovery exception fails closed only for protected cwd
   try {
     expect(await run("./render.sh master")).toContain("protected decision failed");
     expect(await run("echo x > alias/motion/K/approvals.json", home)).toContain("protected decision failed");
-    expect(await run("cat alias/motion-keys/a.key", home)).toContain("protected decision failed");
+    expect(await run("cat alias/video-motion/keys/a.key", home)).toContain("protected decision failed");
     expect(await run("git status", home)).toBe("");
   } finally { spy.mockRestore(); }
 });

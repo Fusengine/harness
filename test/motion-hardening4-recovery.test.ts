@@ -17,7 +17,7 @@ afterEach(() => { for (const f of fixtures.splice(0)) rmSync(f.base, { recursive
 for (const mode of ["remove", "replace"] as const) test(`registry ${mode} still quarantines changed output and persists invalidation`, async () => {
   const f = makeFixture(); fixtures.push(f);
   await run(f, bash("recover", "ls"));
-  const registry = join(f.home, ".fuse-harness/motion/state", `${rootKey(canonicalRoot(f.proj))}.json`);
+  const registry = join(f.home, ".fuse-harness/video-motion/state", `${rootKey(canonicalRoot(f.proj))}.json`);
   if (mode === "remove") unlinkSync(registry); else writeFileSync(registry, "{}");
   writeFileSync(f.draft, "changed");
   const out = await run(f, { hook_event_name: "PostToolUse", session_id: "recover", tool_name: "Read" });
@@ -102,7 +102,7 @@ test("permission failure explicitly preserves data and persists invalidation", a
     const out = await run(f, { hook_event_name: "PostToolUse", session_id: "permission", tool_name: "Read" });
     expect(out).toContain("QUARANTINE FAILED");
     expect(readFileSync(f.draft, "utf8")).toBe("changed-but-unmovable");
-    const registry = join(f.home, ".fuse-harness/motion/state", `${rootKey(canonicalRoot(f.proj))}.json`);
+    const registry = join(f.home, ".fuse-harness/video-motion/state", `${rootKey(canonicalRoot(f.proj))}.json`);
     expect(JSON.parse(readFileSync(registry, "utf8")).invalid).toBe(true);
   } finally { spy.mockRestore(); }
 });

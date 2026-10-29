@@ -36,7 +36,7 @@ test("same authorized draft completion earns a receipt, later tool mutation does
 test("registry removal after activation fails closed rather than resetting baseline", async () => {
   const f = makeFixture(); fixtures.push(f);
   await run(f, bash("registry", "ls"));
-  unlinkSync(join(f.home, ".fuse-harness/motion/state", `${rootKey(canonicalRoot(f.proj))}.json`));
+  unlinkSync(join(f.home, ".fuse-harness/video-motion/state", `${rootKey(canonicalRoot(f.proj))}.json`));
   expect(await run(f, bash("registry", "ls"))).toContain("invalidated");
 });
 

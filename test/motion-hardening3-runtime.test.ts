@@ -15,12 +15,12 @@ const home = realpathSync(mkdtempSync(join(tmpdir(), "motion-runtime3-")));
 const root = join(home, "video");
 mkdirSync(join(root, ".motion"), { recursive: true });
 writeFileSync(join(root, ".motion/project.json"), JSON.stringify({ render: "render.sh", masters: ["out/master.mp4"] }));
-const keyDir = join(home, ".fuse-harness/motion-keys");
+const keyDir = join(home, ".fuse-harness/video-motion/keys");
 mkdirSync(keyDir, { recursive: true });
 symlinkSync(keyDir, join(home, "alias"));
 test("HMAC key native reads, writes, globs and aliases denied; store reads allowed", () => {
   for (const tool of ["Read", "Grep", "Glob", "read_file", "search_files", "glob", "Write", "apply_patch"]) {
-    for (const path of [join(keyDir, "a.key"), join(home, "alias/a.key"), "~/.fuse-harness/motion-keys/*"]) {
+    for (const path of [join(keyDir, "a.key"), join(home, "alias/a.key"), "~/.fuse-harness/video-motion/keys/*"]) {
       const event = normalizeEvent("claude-code", { tool_name: tool, tool_input: { path } });
       expect(motionKeyViolation(event, root, home)?.kind).toBe("block");
     }
@@ -31,11 +31,11 @@ test("HMAC key native reads, writes, globs and aliases denied; store reads allow
   for (const command of ["cd ~ && tar -xf evil.tar", `tar -xf evil.tar -C ${home}`, "cd ~ && unzip evil.zip", "rg . ~/.fuse-harness", "cp -R ~/.fuse-harness /tmp/copy"]) {
     expect(motionKeyViolation(normalizeEvent("claude-code", { tool_name: "Bash", tool_input: { command } }), root, home)?.kind).toBe("block");
   }
-  for (const command of ["cat ~/.fuse-harness/motion-keys/a.key", "cat ~/.fuse-harness/*/*.key", "a=.fuse-har; b=ness; cat ~/$a$b/motion-keys/*", `cat ${home}/alias/a.key`]) {
+  for (const command of ["cat ~/.fuse-harness/video-motion/keys/a.key", "cat ~/.fuse-harness/*/*.key", "a=.fuse-har; b=ness; cat ~/$a$b/video-motion/keys/*", `cat ${home}/alias/a.key`]) {
     const event = normalizeEvent("claude-code", { tool_name: "Bash", tool_input: { command } });
     expect(motionKeyViolation(event, root, home)?.kind).toBe("block");
   }
-  for (const command of ["cat ~/.fuse-harness/motion/K/approvals.json", "ls ~/.fuse-harness/motion", "jq . ~/.fuse-harness/motion/K/approvals.json"]) {
+  for (const command of ["cat ~/.fuse-harness/video-motion/K/approvals.json", "ls ~/.fuse-harness/video-motion", "jq . ~/.fuse-harness/video-motion/K/approvals.json"]) {
     expect(motionKeyViolation(normalizeEvent("claude-code", { tool_name: "Bash", tool_input: { command } }), root, home)).toBeNull();
   }
 });
