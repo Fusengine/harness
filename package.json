@@ -130,10 +130,10 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/fusengine/harness.git"
+		"url": "git+https://github.com/Fusengine/harness.git"
 	},
-	"homepage": "https://github.com/fusengine/harness#readme",
-	"bugs": "https://github.com/fusengine/harness/issues",
+	"homepage": "https://github.com/Fusengine/harness#readme",
+	"bugs": "https://github.com/Fusengine/harness/issues",
 	"sideEffects": false,
 	"scripts": {
 		"test": "bun test",
