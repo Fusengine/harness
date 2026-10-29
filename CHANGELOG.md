@@ -4,6 +4,12 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.112] - 2026-10-30
+
+### Fixed
+
+- **release: `repository.url` owner case matches the GitHub repository for npm provenance** (`package.json`) — the 0.1.111 publish was rejected by the registry (`422 Error verifying sigstore provenance bundle: package.json "repository.url" is "git+https://github.com/fusengine/harness.git", expected to match "https://github.com/Fusengine/harness"`). `repository.url`, `homepage` and `bugs` now use `Fusengine`. 0.1.111 was never published to npm; 0.1.112 ships its content (Codex CONFIRM resubmission fix, Motion data relocation to `~/.fuse-harness/video-motion/`).
+
 ## [0.1.111] - 2026-10-30
 
 ### Fixed
