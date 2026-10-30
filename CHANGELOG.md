@@ -4,6 +4,12 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.113] - 2026-10-30
+
+### Fixed
+
+- **motion: harden the video-motion store migration** (`src/policy/motion/migrate.ts`, `store.ts`, `trust.ts`, `auth-key.ts`, `auth-approval.ts`, `guard-key.ts`, `sensitive.ts`, `src/runtime/motion/index.ts`, `store-failure.ts`) — the `keys/` directory gets a symlink and owner trust check before and after migration and on every key read/create; a migration failure now blocks only Motion-scoped calls and reports the real cause instead of breaking unrelated tools; when both the legacy `~/.fuse-harness/motion` and the new `~/.fuse-harness/video-motion` exist, the new layout wins and the legacy one stays protected; `banned.txt` is the union of both layouts; protected-pre detection only applies to `pre` events. Tests: `motion-migration-hardening`, `motion-migration-event-shapes`.
+
 ## [0.1.112] - 2026-10-30
 
 ### Fixed
