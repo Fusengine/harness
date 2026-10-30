@@ -24,6 +24,8 @@ import { commandContexts } from "../../policy/motion/command-context";
 import { canonicalFilePath } from "../prd/prd-canon";
 import { findReservation, loadBudget, releaseRender } from "../../policy/motion/budget";
 import { existsSync } from "node:fs";
+import { MotionStoreError } from "../../policy/motion/trust";
+import { leftoverKeyContext, storeFailureIsMotionScoped } from "./store-failure";
 
 /** Dispatch on the host-native event, reduced to its meaning for motion. */
 function motionStdout(id: string, payload: Record<string, unknown>, event: NormalizedEvent, opts: HandleOptions, call: MotionCall, project: MotionProject | null): string {
@@ -130,7 +132,7 @@ function lockedMotionHook(id: string, payload: Record<string, unknown>, event: N
     const stdout = terminalStdout ?? motionStdout(id, payload, event, opts, call, project);
     // Pre may add a receipt in a separate state object; reload before updating protected metadata.
     for (const state of sessionMotionStates(event.sessionId, home)) refreshMotionState(state, home);
-    return { stdout: appendMotionContext(id, respondAs, stdout, [coldNotice, ...(kind === "prompt" ? messages : [])].filter(Boolean).join("\n")), exit: 0 };
+    return { stdout: appendMotionContext(id, respondAs, stdout, [coldNotice, project || protectedPre ? leftoverKeyContext(opts.home ?? homedir()) : "", ...(kind === "prompt" ? messages : [])].filter(Boolean).join("\n")), exit: 0 };
   } catch (err) {
     if (kind === "pre" && dispatchedPre && !preHadReceipt && activeProject && activeCall?.event.toolUseId) {
       try {
@@ -156,7 +158,13 @@ function lockedMotionHook(id: string, payload: Record<string, unknown>, event: N
       try { for (const state of sessionMotionStates(event.sessionId, opts.home ?? homedir())) refreshMotionState(state, opts.home ?? homedir()); } catch { /* retain fail-closed response */ }
       if (gate) return { stdout: respond(id, gate, respondAs), exit: 0 };
     }
-    const reason = "The protected motion operation could not be verified safely; retry after resolving the internal error.";
+    let reason = "The protected motion operation could not be verified safely; retry after resolving the internal error.";
+    if (err instanceof MotionStoreError) {
+      // A store/keys failure fails closed for Motion work only, with the real cause and the exact path to fix.
+      if (!storeFailureIsMotionScoped(err, activeProject !== null || protectedPre, event, opts.cwd, opts.home ?? homedir())) return { stdout: "", exit: 0 };
+      reason = `Motion store unusable: ${err.message}`;
+      if (kind === "pre") protectedPre = true;
+    }
     const stdout = protectedPre ? respond(id, { kind: "block", title: "Motion protected decision failed", reason }, respondAs) : kind === "post" || kind === "failure" || kind === "stop" || kind === "subagentStop" ? motionStateResponse(id, respondAs, reason) : "";
     return { stdout, exit: 0 };
   }

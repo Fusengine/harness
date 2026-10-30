@@ -5,6 +5,7 @@ import type { ApprovableStage, MotionApproval } from "../interfaces/motion";
 import { canonicalFilePath, canonicalRoot } from "../../runtime/prd/prd-canon";
 import { rootKey } from "./hash";
 import { grantingMotionKey, readMotionKey } from "./auth-key";
+import { MotionStoreError } from "./trust";
 import { recordMotionGrant, registeredMotionGrant } from "./state-witness";
 
 const HEX = /^[a-f0-9]{64}$/;
@@ -37,5 +38,9 @@ export function validMotionApproval(root: string, a: MotionApproval | null | und
     if (!key) return false;
     const expected = createHmac("sha256", key).update(canonical(a)).digest();
     return timingSafeEqual(Buffer.from(a.signature, "hex"), expected);
-  } catch { return false; }
+  } catch (error) {
+    // An untrusted key/store layout is not "no approval": surface the real cause (Motion-scoped fail-closed).
+    if (error instanceof MotionStoreError) throw error;
+    return false;
+  }
 }

@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { stripProgramBodies } from "./program-bodies";
+import { fuseHarnessHome } from "../../runtime/home-state";
 import { motionHome } from "./store";
 
 /** Currency amount: `12 €`, `1 299,50 EUR`, `$1,299.00`, `£ 40`. Horizontal spaces only (incl. NBSP / narrow NBSP). */
@@ -40,8 +41,16 @@ export function bannedListPath(home: string = homedir()): string {
 
 /** Banned terms (trimmed, non-empty, `#` comments skipped); `[]` when the file is absent/unreadable. */
 export function loadBannedTerms(home: string = homedir()): string[] {
+  // Union of the new list and a not-yet-migrated pre-relocation list: terms are never silently dropped.
+  const terms = new Set(readTerms(bannedListPath(home)));
+  for (const term of readTerms(join(fuseHarnessHome(home), "motion", "banned.txt"))) terms.add(term);
+  return [...terms];
+}
+
+/** Terms of one banned list file; `[]` when absent/unreadable. */
+function readTerms(path: string): string[] {
   try {
-    return readFileSync(bannedListPath(home), "utf8")
+    return readFileSync(path, "utf8")
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l && !l.startsWith("#"));

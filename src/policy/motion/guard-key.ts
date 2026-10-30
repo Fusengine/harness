@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import type { Prompt } from "../../prompt/types";
 import type { NormalizedEvent } from "../../runtime/normalize";
 import { canonicalFilePath } from "../../runtime/prd/prd-canon";
-import { motionKeyDirectory } from "./store";
+import { plainKeyDirectory } from "./trust";
 import { namesMotionKeys } from "./guard-key-patterns";
 import { isUnder } from "./paths";
 import { MOTION_WRITE_TOOLS } from "./constants";
@@ -12,7 +12,8 @@ import { commandContexts, homePath } from "./command-context";
 
 /** Deny direct, canonical alias, glob and variable references to private signing keys. */
 export function motionKeyViolation(event: NormalizedEvent, cwd: string, home: string = homedir()): Prompt | null {
-  const directory = canonicalFilePath(motionKeyDirectory(home));
+  // Guards never migrate or validate the store: a broken layout must not turn into a global block.
+  const directory = canonicalFilePath(plainKeyDirectory(home));
   const names = [event.filePath, ...(event.files ?? []).map((f) => f.filePath)];
   for (const field of ["path", "file_path", "directory", "pattern", "glob", "command", "patch"]) {
     const value = event.input[field];

@@ -12,7 +12,7 @@ import { atomicWrite } from "../../util/json-io";
 import { fuseHarnessHome, sanitizeSessionId } from "../../runtime/home-state";
 import { rootKey } from "./hash";
 import { recordObject } from "../../util/record-object";
-import { migrateMotionData } from "./migrate";
+import { MotionKeyConflictError, migrateMotionData } from "./migrate";
 
 /** Path fragment of the store — what the self-approval guard and PROTECTED_FRAGMENTS match on. */
 export const MOTION_STORE_FRAGMENT = ".fuse-harness/video-motion";
@@ -35,8 +35,26 @@ export function motionKeyPath(root: string, home: string = homedir()): string {
 
 /** `~/.fuse-harness/video-motion` (store, `keys/`, user-level `banned.txt`); migrates the pre-relocation layout on first resolve. */
 export function motionHome(home: string = homedir()): string {
-  migrateMotionData(home);
+  try { migrateMotionData(home); leftovers.delete(home); }
+  catch (error) {
+    // Downgrade/re-upgrade leftover: never lock out. The new directory stays authoritative, the old one untouched.
+    if (!(error instanceof MotionKeyConflictError)) throw error;
+    leftovers.set(home, error.oldKeys);
+  }
   return join(fuseHarnessHome(home), "video-motion");
+}
+
+/** Homes whose old key directory holds a differing same-name key (a leftover of a downgrade), by old key dir. */
+const leftovers = new Map<string, string>();
+
+/**
+ * One-line notice for Motion context when an old key directory is a leftover next to the authoritative new one.
+ * @returns The notice, or `null` when there is no leftover.
+ */
+export function motionLeftoverKeyNotice(home: string = homedir()): string | null {
+  motionHome(home);
+  const old = leftovers.get(home);
+  return old ? `Motion notice: ${old} is a leftover key directory from an older version; approvals signed with its keys are not valid (the new key directory is authoritative).` : null;
 }
 
 /** Per-project store dir: `~/.fuse-harness/video-motion/<sha256(root)[:16]>`. */
