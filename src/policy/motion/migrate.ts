@@ -10,6 +10,7 @@
 import { chmodSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { fuseHarnessHome } from "../../runtime/home-state";
+import { MotionStoreError, assertTrustedHarnessRoot, assertTrustedKeyDir } from "./trust";
 
 /** Homes already handled by this process (the move is idempotent, this only saves syscalls). */
 const done = new Set<string>();
@@ -63,12 +64,22 @@ export function migrateMotionData(home: string): void {
   const oldStore = join(base, "motion");
   const oldKeys = join(base, "motion-keys");
   const root = join(base, "video-motion");
-  if (stat(oldStore) || stat(oldKeys)) {
-    moveDirectory(oldStore, root);
-    if (stat(oldKeys) && ensurePrivateDir(root)) moveDirectory(oldKeys, join(root, "keys"));
+  const keys = join(root, "keys");
+  try {
+    assertTrustedHarnessRoot(base, home);
+    assertTrustedKeyDir(keys, false);
+    if (stat(oldStore) || stat(oldKeys)) {
+      moveDirectory(oldStore, root);
+      if (stat(oldKeys) && ensurePrivateDir(root)) moveDirectory(oldKeys, keys);
+    }
+    assertTrustedRoot(root);
+    assertTrustedKeyDir(keys, false);
+  } catch (error) {
+    if (error instanceof MotionStoreError) throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    throw new MotionStoreError(`Motion data migration failed (${error instanceof Error ? error.message : String(error)}).`, base, false, code);
   }
-  assertTrustedRoot(root);
-  assertNoKeyConflict(oldKeys, join(root, "keys"));
+  assertNoKeyConflict(oldKeys, keys);
   done.add(home);
 }
 
@@ -79,19 +90,25 @@ function assertTrustedRoot(root: string): void {
   const foreign = typeof process.getuid === "function" && info.uid !== process.getuid();
   // A regular file at the root cannot host data; the store readers already treat it as "no approval".
   if (info.isSymbolicLink() || foreign || (info.isDirectory() && (Number(info.mode) & 0o022) !== 0)) {
-    throw new Error(`Motion root ${root} is a symlink, not owned by this user or writable by others; refusing to use it`);
+    throw new MotionStoreError(`Motion root ${root} is a symlink, not owned by this user or writable by others; refusing to use it.`, root);
   }
 }
 
-/** Fail closed when a leftover old key and a new key share a name but differ: one of them may be planted. */
+/** A same-name key differs between the old and the new key directory (downgrade/re-upgrade leftover); the new one stays authoritative. */
+export class MotionKeyConflictError extends Error {
+  constructor(readonly keyName: string, readonly oldKeys: string) {
+    super(`Motion key ${keyName} exists with different content in the old and the new key directory; the new one is authoritative`);
+  }
+}
+
+/** Throw {@link MotionKeyConflictError} when a leftover old key and a new key share a name but differ. */
 function assertNoKeyConflict(oldKeys: string, newKeys: string): void {
   const old = stat(oldKeys);
   if (!old || !old.isDirectory() || old.isSymbolicLink() || !stat(newKeys)) return;
   for (const name of readdirSync(oldKeys)) {
-    if (!name.endsWith(".key") || !stat(join(newKeys, name))) continue;
-    if (!readFileSync(join(oldKeys, name)).equals(readFileSync(join(newKeys, name)))) {
-      throw new Error(`Motion key ${name} exists with different content in the old and the new key directory; the owner must resolve it`);
-    }
+    const a = stat(join(oldKeys, name)), b = stat(join(newKeys, name));
+    if (!name.endsWith(".key") || !a || !b || !a.isFile() || !b.isFile()) continue;
+    if (!readFileSync(join(oldKeys, name)).equals(readFileSync(join(newKeys, name)))) throw new MotionKeyConflictError(name, oldKeys);
   }
 }
 
