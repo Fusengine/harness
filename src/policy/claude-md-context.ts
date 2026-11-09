@@ -1,10 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { resolveMaxLines } from "../config/limits";
+import { resolveMaxLines, splitTarget } from "../config/limits";
 import { DEV_KEYWORDS, type ProjectType } from "./detect-project";
 import { getExpertAgent } from "./expert-agents";
-import { apexDocName, apexPlanTool, harnessHomeSegment } from "./apex-target";
+import { apexDocName, harnessHomeSegment } from "./apex-target";
+import { apexPlanPhrase } from "./apex-target-steps";
 import { detectClaudeMdProjectType } from "./detect-claude-md-project-type";
 
 export { detectClaudeMdProjectType };
@@ -23,15 +24,15 @@ export const DEV_VERBS: RegExp =
 export function buildApexInstruction(projectType: ProjectType, maxLines: number, id: string = "claude-code"): string {
   const expertAgent = getExpertAgent(projectType);
   const seg = harnessHomeSegment(id);
-  const planTool = apexPlanTool(id);
+  const plan = apexPlanPhrase(id);
   return (
     `INSTRUCTION: This is a development task. Use APEX methodology:\n\n` +
-    `**TRACKING FILE**: [project]/${seg}/apex/task.json — create it yourself via apex-methodology Step 0 (init-tracking) if missing\n\n` +
+    `**TRACKING FILE**: [project]/${seg}/apex/task.json — \`${seg}/apex/\` is harness-managed and read-only for agents\n\n` +
     `1. **ANALYZE** (MANDATORY - 3 AGENTS IN PARALLEL):\n` +
     `   - explore-codebase + research-expert + ${expertAgent} (framework expertise)\n` +
     `   - Project type detected: ${projectType}\n\n` +
-    `2. **PLAN**: Use ${planTool} to break down tasks (<${maxLines} lines per file)\n\n` +
-    `3. **EXECUTE**: ${expertAgent}, follow SOLID principles, split at ${maxLines - 10} lines\n\n` +
+    `2. **PLAN**: ${plan} (<${maxLines} lines per file)\n\n` +
+    `3. **EXECUTE**: ${expertAgent}, follow SOLID principles, split at ${splitTarget(maxLines)} lines\n\n` +
     `4. **eLICIT**: self-review with NAMED elicitation techniques (apex ref 03.5-elicit) — fix findings BEFORE validation\n\n` +
     `5. **VERIFY**: functional check — run it, confirm references⇔declarations consistency\n\n` +
     `6. **eXAMINE**: Run sniper agent after ANY modification\n\n` +

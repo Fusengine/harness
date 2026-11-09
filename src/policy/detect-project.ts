@@ -5,7 +5,7 @@ import { join } from "node:path";
 export type ProjectType =
   | "nextjs" | "nuxt" | "angular" | "svelte" | "vue" | "react" | "tailwind"
   | "laravel" | "rails" | "django" | "python" | "go" | "rust" | "swift"
-  | "java" | "scala" | "elixir" | "ruby" | "generic";
+  | "java" | "scala" | "elixir" | "ruby" | "typescript" | "generic";
 
 /** Keywords that signal a development task (APEX trigger). */
 export const DEV_KEYWORDS: RegExp =
