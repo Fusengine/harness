@@ -34,7 +34,7 @@ test("compressInjection: newest RECENT_FULL bullets stay verbatim, older collaps
 
 test("compressInjection: a bullet without → falls back to its first sentence", () => {
   const input = "# LESSON.md\n\n" + Array.from({ length: RECENT_FULL + 1 }, (_v, i) =>
-    `- [2026-06-${String(i + 1).padStart(2, "0")} 09:00] sujet ${i} un fait. deux phrase ignoree.`).join("\n") + "\n";
+    `- [2026-06-${String(20 - i).padStart(2, "0")} 09:00] sujet ${i} un fait. deux phrase ignoree.`).join("\n") + "\n";
   const out = compressInjection(input);
   const last = out.split("\n").at(-1) ?? "";
   expect(last).toContain("sujet 10 un fait.");
@@ -42,7 +42,7 @@ test("compressInjection: a bullet without → falls back to its first sentence",
 });
 
 test("compressInjection: a bullet whose LAST → segment is a tiny aside keeps the longest rule, not the stub", () => {
-  const older = Array.from({ length: RECENT_FULL }, (_v, i) => `- [2026-06-${String(i + 1).padStart(2, "0")} 09:00] filler bullet ${i}`);
+  const older = Array.from({ length: RECENT_FULL }, (_v, i) => `- [2026-08-${String(20 - i).padStart(2, "0")} 09:00] filler bullet ${i}`);
   const patho = "- [2026-07-02 00:02] narrative context blah blah → always re-check git status before staging a shared batch commit → (cf. lecture).";
   const out = compressInjection("# LESSON.md\n\n" + [...older, patho].join("\n") + "\n");
   const last = out.split("\n").at(-1) ?? "";
@@ -52,7 +52,7 @@ test("compressInjection: a bullet whose LAST → segment is a tiny aside keeps t
 });
 
 test("compressInjection: a GLUED arrow in the narrative is not a delimiter (real 2026-07-01 16:32 bullet)", () => {
-  const older = Array.from({ length: RECENT_FULL }, (_v, i) => `- [2026-06-${String(i + 1).padStart(2, "0")} 09:00] filler bullet ${i}`);
+  const older = Array.from({ length: RECENT_FULL }, (_v, i) => `- [2026-08-${String(20 - i).padStart(2, "0")} 09:00] filler bullet ${i}`);
   const real = "- [2026-07-01 16:32] J'ai élargi DEFAULT_WINDOW_MS (120s→300s) pensant corriger — ce fix était INERTE car bin.ts renseigne TOUJOURS windowMs. → Quand plusieurs constantes défaut existent pour le même concept, tracer le VRAI point d'entrée production avant de conclure.";
   const last = compressInjection("# LESSON.md\n\n" + [...older, real].join("\n") + "\n").split("\n").at(-1) ?? "";
   expect(last).toContain("Quand plusieurs constantes"); // the rule after the SPACED arrow
@@ -60,7 +60,7 @@ test("compressInjection: a GLUED arrow in the narrative is not a delimiter (real
 });
 
 test("compressInjection: a SPACED arrow used as prose inside the rule is preserved, not chopped (real 2026-07-01 17:45 bullet)", () => {
-  const older = Array.from({ length: RECENT_FULL }, (_v, i) => `- [2026-06-${String(i + 1).padStart(2, "0")} 09:00] filler bullet ${i}`);
+  const older = Array.from({ length: RECENT_FULL }, (_v, i) => `- [2026-08-${String(20 - i).padStart(2, "0")} 09:00] filler bullet ${i}`);
   const real = "- [2026-07-01 17:45] J'ai porté la table AGENT_MAP verbatim sans vérifier. → Toute table qui mappe \"type de projet/framework\" → \"identifiant d'agent\" doit être vérifiée contre le registre RÉEL d'agents disponibles, jamais copiée telle quelle.";
   const last = compressInjection("# LESSON.md\n\n" + [...older, real].join("\n") + "\n").split("\n").at(-1) ?? "";
   expect(last).toContain("Toute table qui mappe"); // rule kept from its start, not chopped at the internal arrow
