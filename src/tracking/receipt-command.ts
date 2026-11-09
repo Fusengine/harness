@@ -22,6 +22,8 @@
  * only. `cd x && bun test` and `bun test 2>&1 | tail -5` both still resolve:
  * the runner is in (or is) the last segment either way.
  */
+import { unquotedShellText } from "../policy/guards/bash-write-unquoted";
+import { ENV_PREFIX, WRAP, WRAP_ARG } from "../policy/guards/bash-command-anchor";
 import type { RunnerSpec } from "./receipts";
 import { RUNNERS } from "./receipt-runners";
 
@@ -127,4 +129,60 @@ export function matchRunner(unquoted: string): RunnerSpec | null {
     return isSuppressed(tail, runner.kind) ? null : runner;
   }
   return null;
+}
+
+/**
+ * `RunnerSpec.tool` names whose process IS the checker/test binary, so a hook
+ * exit code is that binary's own. ALLOWLIST by design: the script launchers
+ * (`npm|pnpm|yarn [run] test`, `bun run test` — tool `npm/pnpm/yarn test`) take
+ * their exit from the LAST command of an opaque package.json script, and any
+ * runner added later stays out until it is reviewed and listed here.
+ */
+const DIRECT_RUNNER_TOOLS: ReadonlySet<string> = new Set([
+  "bun test", "vitest", "jest", "pytest", "go test", "cargo test", "phpunit", "pest",
+  "swift test", "xcodebuild test", "dart/flutter test",
+  "tsc", "mypy", "pyright", "phpstan", "go vet", "go build", "cargo check", "cargo clippy", "swift build",
+]);
+
+/**
+ * True when `command` resolves (like {@link matchRunner}) to a DIRECT runner
+ * ({@link DIRECT_RUNNER_TOOLS}), never a script launcher.
+ * @param command - The raw Bash command line.
+ */
+export function isDirectRunnerCommand(command: string): boolean {
+  const unquoted = unquotedShellText(command);
+  const runner = matchRunner(unquoted);
+  return runner !== null && DIRECT_RUNNER_TOOLS.has(runner.tool) && !viaScriptLauncher(unquoted);
+}
+
+/** Command-position head: env assignments + wrapper chain (same pieces as `RECEIPT_ANCHOR` in `./receipt-runners`). */
+const ANCHOR_HEAD = new RegExp(`^\\s*${ENV_PREFIX}(?:${WRAP}\\s+(?:${WRAP_ARG}\\s+)*)*`);
+
+/**
+ * True when the runner is reached through `yarn <bin>` or `pnpm [opts] <bin>`
+ * WITHOUT `exec`: both run a same-name package.json script first when one exists,
+ * so the exit code is that script's. Conservative on purpose — `pnpm exec` only
+ * counts after unambiguous options (`--long=value`, `-s|--silent|-r|--recursive`):
+ * `pnpm -C exec x` (option VALUE "exec") and `--filter api exec x` are refused.
+ * `npx`, `bunx`, `pnpm exec`, `uv run`, `python -m`, `vendor/bin/` and bare
+ * binaries are not launchers.
+ * @param unquoted - `unquotedShellText(command)`.
+ */
+function viaScriptLauncher(unquoted: string): boolean {
+  const rest = lastListSegment(unquoted).replace(ANCHOR_HEAD, "");
+  if (/^yarn\s/.test(rest)) return true;
+  return /^pnpm\s/.test(rest) && !/^pnpm\s+(?:--[\w-]+=\S+\s+|(?:-s|--silent|-r|--recursive)\s+)*exec\s/.test(rest);
+}
+
+/**
+ * True only when `command` is ONE simple command: no pipe, list separator
+ * (`;`, `&&`, `||`), job-control `&`, subshell, command/process substitution,
+ * redirection (except the harmless fd duplication `2>&1`) or newline. Checked on
+ * the RAW text — no quote masking — so a quoted metacharacter is conservatively
+ * "compound". Used to decide whether a hook exit code can be attributed to the
+ * runner itself (a pipeline's exit code is its last stage's).
+ * @param command - The raw Bash command line.
+ */
+export function isSingleSimpleCommand(command: string): boolean {
+  return !/[|;&<>()`\n\r]|\$\(/.test(command.replace(/\d*>&\d(?=\s|$)/g, ""));
 }

@@ -14,6 +14,7 @@ import { recordCodexPostFailure } from "../tracking/codex-post-failure";
 import { projectStateDir } from "./project-state-dir";
 import { fanOutFiles, firstFileMatch } from "./post-fanout";
 import { postOutcome } from "./post-outcome";
+import { rawEventName } from "./handle-payload";
 import { prdPostCheck } from "./prd";
 import type { PreContext } from "./handle-pre";
 import type { HandleOutcome } from "./handle";
@@ -71,7 +72,7 @@ export async function handlePost(ctx: PreContext): Promise<HandleOutcome> {
   // Verification receipts (static-check/test runs, see receipt-runners) —
   // structured responses only (Kimi's string `tool_output` would forge a
   // success receipt; see module).
-  await captureBashReceipt(file, event.tool, event.command, payload.tool_result, response, opts.now, payload.duration_ms);
+  await captureBashReceipt(file, event.tool, event.command, payload.tool_result, response, opts.now, payload.duration_ms, id === "claude-code" && rawEventName(payload) === "PostToolUse" ? { toolInput: (payload.tool_input ?? {}) as Record<string, unknown> } : undefined);
   if (id === "codex") recordCodexPostFailure(event.tool, payload.tool_result ?? response, { now: opts.now, dir: projectStateDir(opts.cwd), sessionId: event.sessionId });
   // Codex `apply_patch` and Cursor `afterFileEdit` fan into per-file events for
   // tracking, validation, post-edit context, and notices.
