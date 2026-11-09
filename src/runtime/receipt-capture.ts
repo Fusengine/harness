@@ -16,6 +16,7 @@ import { captureReceipt } from "../tracking/receipts";
  * @param toolResult - `payload.tool_result` (preferred), when present.
  * @param response - `payload.tool_response ?? payload.tool_output` fallback.
  * @param now - Clock.
+ * @param durationMs - `payload.duration_ms` (tool run time, optional in Claude Code): lets the receipt record when the run STARTED.
  */
 export async function captureBashReceipt(
   file: string,
@@ -24,6 +25,7 @@ export async function captureBashReceipt(
   toolResult: unknown,
   response: unknown,
   now: number,
+  durationMs?: unknown,
 ): Promise<void> {
   if (tool !== "Bash" || !command) return;
   const r = (toolResult ?? response) as { exit_code?: unknown; stdout?: unknown; stderr?: unknown } | undefined;
@@ -33,5 +35,5 @@ export async function captureBashReceipt(
   // actually reported success. Skip capture entirely rather than guess.
   if (typeof r.exit_code !== "number" || !Number.isFinite(r.exit_code)) return;
   const out = `${typeof r.stdout === "string" ? r.stdout : ""}\n${typeof r.stderr === "string" ? r.stderr : ""}`;
-  await captureReceipt(file, command, out, r.exit_code, now);
+  await captureReceipt(file, command, out, r.exit_code, now, typeof durationMs === "number" ? durationMs : undefined);
 }

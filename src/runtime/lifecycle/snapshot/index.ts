@@ -28,8 +28,8 @@ export function renderSnapshot(cwd: string, moduleUrl: string): string {
     { title: "Git", body: safe(() => collectGit(root)) },
     { title: "Version", body: safe(() => collectVersion(root, moduleUrl)) },
     { title: "Board", body: safe(() => collectBoard(root)) },
-    // raw `cwd` (not `root`): oneShotSummary derives the state dir via defaultStateDir(cwd),
-    // keyed on the same raw hook cwd the runtime writes gate counters under (handle.ts).
+    // raw `cwd` (not `root`): oneShotSummary derives the state dir via projectStateDir(cwd),
+    // the same resolution (CLAUDE_PROJECT_DIR wins over cwd) the runtime writes gate counters under (handle.ts).
     { title: "One-shot gates", body: safe(() => oneShotSummary(cwd)) },
   ];
   return renderSections(sections);

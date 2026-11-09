@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { cleanupSession } from "./session-end";
 import { validateTaskSolid } from "./task-completed";
-import { defaultStateDir } from "../paths";
+import { projectStateDir } from "../project-state-dir";
 import { notify } from "../notifications";
 
 /**
@@ -31,5 +31,5 @@ export function stopCore(payload: Record<string, unknown>, cwd: string, now: num
   // Turn finished — voice the "stop" sound (fire-and-forget, fail-open: never
   // throws, never blocks; a silent no-op when opted out or no sound resolves).
   notify("stop");
-  return validateTaskSolid(payload, homedir(), now, defaultStateDir(cwd), "Stop", id);
+  return validateTaskSolid(payload, homedir(), now, projectStateDir(cwd), "Stop", id);
 }

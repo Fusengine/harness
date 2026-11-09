@@ -6,8 +6,11 @@ import { resolveMaxLines } from "../../config/limits";
 import { resolveTtlSec } from "../../config/ttl";
 import { countLines } from "../../policy/file-size";
 import { loadSessionState, sanitizeSessionId } from "../home-state";
-import { defaultStateDir, trackFile } from "../paths";
-import { freshReceiptFromFile } from "../../tracking/receipts";
+import { trackFile } from "../paths";
+import { freshReceiptFromFile, verifiedAtFromFile } from "../../tracking/receipts";
+import { projectStateDir } from "../project-state-dir";
+import type { SessionChanges } from "./code-edit-time";
+import { isClaudeScratchpad } from "./scratchpad-path";
 import { receiptHint } from "./receipt-hint";
 import { CODE_EXTENSIONS } from "./code-extensions";
 import { stopNoticeOnce, stopReceiptDue, stopSolidMessage, stopSolidResponse } from "./stop-notice";
@@ -16,13 +19,11 @@ import { stopNoticeOnce, stopReceiptDue, stopSolidMessage, stopSolidResponse } f
 const RECEIPT_TTL_MULTIPLIER = 5;
 
 /** Files modified during the session, persisted by {@link trackSessionChanges}. */
-interface Changes {
-  modifiedFiles?: string[];
-}
+type Changes = SessionChanges;
 
-/** The modified files that are code (by extension) — the receipt gate's trigger set. */
+/** The modified files that are code (by extension) — the receipt gate's trigger set. Session-scratchpad probes (throwaway, real Claude Code path only) never trigger it. */
 function codeFiles(files: string[]): string[] {
-  return files.filter((fp) => CODE_EXTENSIONS.has(extname(fp)));
+  return files.filter((fp) => CODE_EXTENSIONS.has(extname(fp)) && !isClaudeScratchpad(fp));
 }
 
 /**
@@ -34,11 +35,23 @@ function codeFiles(files: string[]): string[] {
  * `{"continue":false,"stopReason":…}`, which halts the teammate with the reason
  * shown to the user. Returns that JSON, or `null` when the session is clear.
  */
-function receiptGate(sid: string, files: string[], now: number, stateDir: string, cwd: string): string | null {
+function receiptGate(sid: string, files: string[], editedAt: Record<string, number>, now: number, stateDir: string, cwd: string): string | null {
   const code = codeFiles(files);
   if (code.length === 0) return null;
   const windowMs = resolveTtlSec(process.env) * 1000 * RECEIPT_TTL_MULTIPLIER;
-  if (freshReceiptFromFile(trackFile(sid, stateDir), windowMs, now)) return null;
+  const track = trackFile(sid, stateDir);
+  // verifiedAt cut-off: a file edited after the newest green run STARTED is unverified, however fresh that run is.
+  const verifiedAt = verifiedAtFromFile(track);
+  const stale = verifiedAt !== null && code.some((f) => (editedAt[f] ?? -Infinity) > verifiedAt);
+  if (stale) return refusal(code, cwd);
+  if (freshReceiptFromFile(track, windowMs, now)) return null;
+  // Past the TTL: still verified when EVERY code file has an edit stamp at or before the green run (modifiedFiles is never cleared; legacy unstamped files keep the TTL rule).
+  if (verifiedAt !== null && code.every((f) => editedAt[f] !== undefined)) return null;
+  return refusal(code, cwd);
+}
+
+/** The documented `TaskCompleted`/`Stop` refusal JSON for unverified code. */
+function refusal(code: string[], cwd: string): string {
   const stopReason =
     "VERIFICATION RECEIPT REQUIRED: code files changed but no fresh passing verification receipt " +
     "exists. " + receiptHint(cwd, code);
@@ -73,11 +86,12 @@ function collectViolations(files: string[], max: number): string[] {
  * @param id - Harness adapter id (Stop only: shapes the once-per-session notice; TaskCompleted output is unchanged).
  * @returns The native hook stdout, or `""` when the session is clean.
  */
-export function validateTaskSolid(payload: Record<string, unknown>, home: string = homedir(), now: number = Date.now(), stateDir: string = defaultStateDir(process.cwd()), event: string = "TaskCompleted", id: string = "claude-code"): string {
+export function validateTaskSolid(payload: Record<string, unknown>, home: string = homedir(), now: number = Date.now(), stateDir: string = projectStateDir(process.cwd()), event: string = "TaskCompleted", id: string = "claude-code"): string {
   const sid = sanitizeSessionId(payload.session_id ?? "unknown");
   if (!sid) return "";
   const changes = loadSessionState(sid, home).changes as Changes | undefined;
   const files = changes?.modifiedFiles ?? [];
+  const editedAt = changes?.editedAt ?? {};
   if (files.length === 0) return "";
   const max = resolveMaxLines();
   const violations = collectViolations(files, max);
@@ -86,14 +100,14 @@ export function validateTaskSolid(payload: Record<string, unknown>, home: string
     // Stop runs every turn over the same session file list. Receipt refusal: periodic
     // (lessons-reminder cadence) until a passing receipt lands. SOLID: once, re-armed on change.
     if (violations.length === 0) {
-      const verdict = receiptGate(sid, files, now, stateDir, cwd);
+      const verdict = receiptGate(sid, files, editedAt, now, stateDir, cwd);
       return verdict && stopReceiptDue(sid, stateDir, now) ? verdict : "";
     }
     const msg = stopSolidMessage(violations, max);
     if (!stopNoticeOnce(sid, `${msg}\n${codeFiles(files).join("\n")}`, stateDir, now)) return "";
     return stopSolidResponse(id, msg);
   }
-  if (violations.length === 0) return receiptGate(sid, files, now, stateDir, cwd) ?? "";
+  if (violations.length === 0) return receiptGate(sid, files, editedAt, now, stateDir, cwd) ?? "";
   const taskId = String(payload.task_id ?? "");
   const subject = String(payload.task_subject ?? "");
   const msg =

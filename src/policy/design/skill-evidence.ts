@@ -8,7 +8,8 @@
 import type { SessionTrack } from "../../tracking/session-state";
 import { trackJournalEnabled } from "../../tracking/store";
 import { readTrackSync } from "../../tracking/track-compact";
-import { defaultStateDir, trackFile } from "../../runtime/paths";
+import { trackFile } from "../../runtime/paths";
+import { projectStateDir } from "../../runtime/project-state-dir";
 import { isDocConsulted } from "../../freshness/doc-helpers";
 import type { DesignEvidence } from "./skill-gate";
 
@@ -20,7 +21,7 @@ import type { DesignEvidence } from "./skill-gate";
  * @param cwd - the project root (selects the per-project state dir).
  * @param baseDir - override the track base dir (tests); defaults to the project state dir.
  */
-export function collectDesignEvidence(sessionId: string, cwd: string, baseDir: string = defaultStateDir(cwd)): DesignEvidence {
+export function collectDesignEvidence(sessionId: string, cwd: string, baseDir: string = projectStateDir(cwd)): DesignEvidence {
   let track: SessionTrack | null = null;
   try {
     track = readTrackSync(trackFile(sessionId, baseDir), trackJournalEnabled());

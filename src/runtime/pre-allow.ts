@@ -13,7 +13,7 @@ import { lessonsFileFor } from "./lifecycle/lessons/state";
 import { projectRoot } from "../util/project-root";
 import { oncePerWindow } from "./inject-dedup";
 import { sessionLessonOnce } from "./inject-session/lesson-once";
-import { defaultStateDir } from "./paths";
+import { projectStateDir } from "./project-state-dir";
 import { isApexScoped } from "./gate-helpers";
 import { REQUIRED_AGENTS, DEFAULT_WINDOW_MS } from "./gate";
 import { agentsFreshInTrack } from "../freshness/agent-evidence-record";
@@ -48,7 +48,7 @@ async function freshEvidenceNotice(event: NormalizedEvent, evidence: EvidenceChe
   const windowMs = evidence.windowMs ?? DEFAULT_WINDOW_MS;
   const track = await loadTrack(evidence.trackFile);
   if (!agentsFreshInTrack(track, REQUIRED_AGENTS, windowMs, evidence.now)) return null;
-  if (!oncePerWindow(`evidence-fresh:${event.sessionId}`, windowMs, { now: evidence.now, dir: defaultStateDir(cwd) })) return null;
+  if (!oncePerWindow(`evidence-fresh:${event.sessionId}`, windowMs, { now: evidence.now, dir: projectStateDir(cwd) })) return null;
   return evidenceFreshNotice();
 }
 

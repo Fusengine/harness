@@ -1,7 +1,7 @@
 import { attachSystemMessage } from "../adapters/claude";
 import { designPassNotice } from "../policy/design/gates";
 import { refCreditNoticeFor } from "./notices";
-import { defaultStateDir } from "./paths";
+import { projectStateDir } from "./project-state-dir";
 import { respond } from "./respond";
 import type { Activity } from "./record";
 import type { HandleOutcome } from "./handle";
@@ -45,7 +45,7 @@ export function postOutcome(input: {
     if (notice?.userMessage) noticeLines.push(notice.userMessage);
   }
   const notice: Prompt | null = noticeLines.length ? { kind: "inform", title: "Design pipeline", reason: "", userMessage: noticeLines.join("\n") } : null;
-  const refNotice = refCreditNoticeFor(activities, sessionId, now, defaultStateDir(cwd));
+  const refNotice = refCreditNoticeFor(activities, sessionId, now, projectStateDir(cwd));
   const userMessage = [notice?.userMessage, refNotice].filter(Boolean).join("\n") || undefined;
   // Cursor ignores callback fields for afterFileEdit; complete successfully
   // without emitting the permission schema reserved for pre-execution hooks.

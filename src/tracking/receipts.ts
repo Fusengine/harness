@@ -39,6 +39,13 @@ export interface Receipt {
   pass?: number;
   fail?: number;
   ts: number;
+  /**
+   * When the verified run STARTED (epoch ms; `ts` minus the tool duration). Only files edited after this are unverified.
+   * Absent when the host sent no `duration_ms` (optional in Claude Code) and on older receipts: the gate then ignores it
+   * and behaves EXACTLY as before `verifiedAt` existed (fresh receipt within TTL x5, no edit-time cut-off). No PreToolUse
+   * start time is recorded for Bash `tool_use_id`s, so a start time is never guessed.
+   */
+  verifiedAt?: number;
 }
 
 /**
@@ -75,13 +82,16 @@ export function recordReceipt(track: SessionTrack, receipt: Receipt): SessionTra
  * @param output - Combined stdout+stderr (bun writes its summary to stderr).
  * @param exitCode - The command's exit code.
  * @param now - Capture timestamp (epoch ms).
+ * @param durationMs - Host-reported tool run time (`payload.duration_ms`); when a positive finite number, sets `verifiedAt = now - durationMs`.
  */
-export function classifyReceipt(command: string, output: string, exitCode: number, now: number): Receipt | null {
+export function classifyReceipt(command: string, output: string, exitCode: number, now: number, durationMs?: number): Receipt | null {
   const unquoted = unquotedShellText(command);
   const runner = matchRunner(unquoted);
   if (!runner) return null;
   const counts = runner.counts?.(stripAnsi(output)) ?? {};
-  return { kind: runner.kind, tool: runner.tool, exitCode, pass: counts.pass, fail: counts.fail, ts: now };
+  const base: Receipt = { kind: runner.kind, tool: runner.tool, exitCode, pass: counts.pass, fail: counts.fail, ts: now };
+  // `verifiedAt` only when the host reported a duration; otherwise it is absent and the gate keeps its TTL-only rule (receipt shape unchanged).
+  return typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs > 0 ? { ...base, verifiedAt: now - durationMs } : base;
 }
 
 /**
@@ -117,6 +127,33 @@ export function freshPassingReceipt(track: SessionTrack, windowMs: number, now: 
 }
 
 /**
+ * Start time of the NEWEST passing run (by `ts`, any age): the cut-off after which
+ * an edited file is unverified again.
+ * @param track - The session track.
+ * @returns That receipt's `verifiedAt`, or `null` when there is no passing receipt or the newest one carries none
+ *   (a duration-less newest run keeps the pre-`verifiedAt` TTL-only rule, even if an older run recorded a start).
+ */
+export function newestPassingVerifiedAt(track: SessionTrack): number | null {
+  const passing = (track.receipts ?? []).filter(isPassing);
+  if (passing.length === 0) return null;
+  const newest = passing.reduce((a, b) => (b.ts > a.ts ? b : a));
+  return newest.verifiedAt ?? null;
+}
+
+/**
+ * File variant of {@link newestPassingVerifiedAt}; `null` on any read/verify failure
+ * (the caller then applies its pre-`verifiedAt` TTL-only rule).
+ * @param file - Path of the signed session track.
+ */
+export function verifiedAtFromFile(file: string): number | null {
+  try {
+    return newestPassingVerifiedAt(readTrackSync(file, trackJournalEnabled()));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Sync variant reading the track directly (snapshot ⊕ journal) — for the sync
  * gates (TaskCompleted / SubagentStop). Returns the newest passing receipt, or
  * `null` on any read/verify failure (fail-closed: no proof ⇒ unverified).
@@ -133,8 +170,8 @@ export function freshReceiptFromFile(file: string, windowMs: number, now: number
  * Capture a verification receipt from a PostToolUse Bash command into the signed
  * track (best effort — a non-verification command is a no-op).
  */
-export async function captureReceipt(file: string, command: string, output: string, exitCode: number, now: number): Promise<void> {
-  const receipt = classifyReceipt(command, output, exitCode, now);
+export async function captureReceipt(file: string, command: string, output: string, exitCode: number, now: number, durationMs?: number): Promise<void> {
+  const receipt = classifyReceipt(command, output, exitCode, now, durationMs);
   if (!receipt) return;
   await withTrack(file, (track) => recordReceipt(track, receipt));
 }

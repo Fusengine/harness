@@ -11,7 +11,7 @@ import { classifyAgentEvidence, recordAgentEvidence } from "../freshness/agent-e
 import { recordCodexSpawnEvidence } from "../freshness/codex-spawn-evidence";
 import { captureBashReceipt } from "./receipt-capture";
 import { recordCodexPostFailure } from "../tracking/codex-post-failure";
-import { defaultStateDir } from "./paths";
+import { projectStateDir } from "./project-state-dir";
 import { fanOutFiles, firstFileMatch } from "./post-fanout";
 import { postOutcome } from "./post-outcome";
 import { prdPostCheck } from "./prd";
@@ -71,8 +71,8 @@ export async function handlePost(ctx: PreContext): Promise<HandleOutcome> {
   // Verification receipts (static-check/test runs, see receipt-runners) —
   // structured responses only (Kimi's string `tool_output` would forge a
   // success receipt; see module).
-  await captureBashReceipt(file, event.tool, event.command, payload.tool_result, response, opts.now);
-  if (id === "codex") recordCodexPostFailure(event.tool, payload.tool_result ?? response, { now: opts.now, dir: defaultStateDir(opts.cwd), sessionId: event.sessionId });
+  await captureBashReceipt(file, event.tool, event.command, payload.tool_result, response, opts.now, payload.duration_ms);
+  if (id === "codex") recordCodexPostFailure(event.tool, payload.tool_result ?? response, { now: opts.now, dir: projectStateDir(opts.cwd), sessionId: event.sessionId });
   // Codex `apply_patch` and Cursor `afterFileEdit` fan into per-file events for
   // tracking, validation, post-edit context, and notices.
   const files = fanOutFiles(event);

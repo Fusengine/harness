@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { atomicWrite } from "../util/json-io";
 import { denyHash } from "../policy/deny-loop";
-import { defaultStateDir } from "../runtime/paths";
+import { projectStateDir } from "../runtime/project-state-dir";
 import { applyAllow, applyDeny, EMPTY, formatSummary, pruneState, type OneShotState } from "./one-shot-store";
 import { burstFirst } from "./one-shot-dedup";
 import type { Prompt } from "../prompt/types";
@@ -77,15 +77,15 @@ export function recordOneShot(prompt: Prompt | null, input: OneShotInput, opts: 
 
 /**
  * Compact, injection-ready one-shot summary for the project rooted at `cwd`. The
- * state dir is derived EXACTLY like the runtime writer ({@link defaultStateDir},
- * mirroring `handle.ts` `trackFile(sid, defaultStateDir(cwd))`), so the file read
+ * state dir is derived EXACTLY like the runtime writer ({@link projectStateDir},
+ * mirroring `handle.ts` `trackFile(sid, projectStateDir(cwd))`), so the file read
  * here is the same one {@link recordOneShot} wrote. "" when no data or read error.
  * @param cwd - The project working directory (Claude `cwd`), NOT the state dir.
  * @returns One line, e.g. `gates 7d: 88% one-shot (44/50 clean); ...`, or "".
  */
 export function oneShotSummary(cwd: string): string {
   try {
-    const s = pruneState(loadState(join(defaultStateDir(cwd), SIDECAR)), Date.now(), WINDOW_MS);
+    const s = pruneState(loadState(join(projectStateDir(cwd), SIDECAR)), Date.now(), WINDOW_MS);
     return formatSummary(s);
   } catch {
     return "";

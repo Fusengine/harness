@@ -4,7 +4,8 @@ import { homedir } from "node:os";
 import { contextResponse, systemMessage } from "../../adapters/claude";
 import { resolveTtlSec } from "../../config/ttl";
 import { loadSessionState, sanitizeSessionId, saveSessionState, sessionsDir } from "../home-state";
-import { defaultStateDir, trackFile } from "../paths";
+import { trackFile } from "../paths";
+import { projectStateDir } from "../project-state-dir";
 import { freshReceiptFromFile } from "../../tracking/receipts";
 import { attributeFiles, filesWrittenByAgent } from "./agent-files";
 import { receiptHint } from "./receipt-hint";
@@ -96,7 +97,7 @@ export function trackAgentMemory(data: Record<string, unknown>, home: string = h
         // missing proof when the agent owns code but posted no fresh passing receipt.
         // Window = TTL×5, matching the TaskCompleted receipt gate.
         const windowMs = resolveTtlSec(process.env) * 1000 * 5;
-        const noReceipt = freshReceiptFromFile(trackFile(sessionId, defaultStateDir(process.cwd())), windowMs, now) === null;
+        const noReceipt = freshReceiptFromFile(trackFile(sessionId, projectStateDir(process.cwd())), windowMs, now) === null;
         const note = noReceipt ? ` NO VERIFICATION RECEIPT — ${shortReceiptHint(hookCwd, present)}` : "";
         return reminderOutput(id, `SNIPER VALIDATION REQUIRED: Agent '${agentType}' modified ${present.length} code file(s): ${present.join(", ")}. Run sniper agent now.${note}`);
       }

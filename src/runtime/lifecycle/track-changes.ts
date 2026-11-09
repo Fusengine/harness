@@ -6,14 +6,14 @@ import { onceExclusive } from "../inject-dedup";
 import { BURST_DEDUP_MS } from "../burst-window";
 import { sniperRequiredNotice } from "../notices";
 import { isCodeFile } from "./code-extensions";
+import type { SessionChanges } from "./code-edit-time";
+import { isClaudeScratchpad } from "./scratchpad-path";
 
-/** Shape of the `changes` block persisted in per-session state. */
-interface Changes {
-  cumulativeCodeFiles: number;
-  modifiedFiles: string[];
-  lastModifiedFile?: string;
-  lastCheck?: string;
-}
+/** `changes` block persisted in per-session state (counts and file list are always present once tracked). */
+type Changes = SessionChanges & { cumulativeCodeFiles: number; modifiedFiles: string[] };
+
+/** Version-bump modules (`__version__.py`, `version.py`, `_version.py`): edited at release time, never a code change to re-verify. */
+const VERSION_FILE = /^_{0,2}version_{0,2}\.py$/;
 
 /**
  * Handle PostToolUse Write/Edit: track the cumulative set of modified code
@@ -33,9 +33,13 @@ export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, hom
   const files = [...prev.modifiedFiles];
   let count = prev.cumulativeCodeFiles;
   if (!files.includes(filePath)) { count += 1; files.push(filePath); }
+  // Per-file edit stamp (release gate + verifiedAt cut-off). Version-bump and scratchpad files stay tracked as before but are not stamped, so they never re-arm a gate.
+  const editedAt = { ...(prev.editedAt ?? {}) };
+  if (!VERSION_FILE.test(basename(filePath)) && !isClaudeScratchpad(filePath)) editedAt[filePath] = now;
   state.changes = {
     cumulativeCodeFiles: count,
     modifiedFiles: files,
+    editedAt,
     lastModifiedFile: filePath,
     lastCheck: new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z"),
   } satisfies Changes;
