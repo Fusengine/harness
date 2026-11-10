@@ -1,7 +1,7 @@
 /**
  * Codex CONFIRM resubmission + formatted-code regressions (2026-10-29 incident):
  * 1. A code already armed by a fan-out sibling (or retyped by the owner) must
- *    answer `armed` again — never "inconnu" — without minting, extending or
+ *    answer `armed` again — never "unknown" — without minting, extending or
  *    moving anything (state file byte-identical).
  * 2. A code whose token was consumed (receipt only) answers `already-consumed`.
  * 3. Markdown/quote-wrapped whole-message codes arm; nothing else changes.
