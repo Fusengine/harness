@@ -6,8 +6,9 @@
  * across the three `run*` functions).
  */
 import { join } from "node:path";
-import { prdDir } from "../../policy/prd/prd-paths";
-import { readRouter, readTaskFile } from "../../policy/prd/prd-io";
+import { prdDir, prdRouterPath } from "../../policy/prd/prd-paths";
+import { readRouterState, readTaskFile } from "../../policy/prd/prd-io";
+import { describeRouterState } from "../../policy/prd/prd-router-state";
 import { isPrdFlagSet } from "../../policy/prd/prd-enabled";
 import type { PrdRouter, PrdRouterEntry, PrdTaskFile } from "../../policy/prd/interfaces/types";
 import { acquireLock } from "../../runtime/lifecycle/aipilot/apex-task-store";
@@ -40,9 +41,11 @@ export type PrdTaskLookup =
 
 /** Reads the router + the named task's task-PRD file. Never calls `process.exit`. */
 export async function loadTaskFileFor(root: string, homeSeg: string, task: string): Promise<PrdTaskLookup> {
-  const router = await readRouter(root, homeSeg);
-  const routerEntry = router?.[task];
-  if (!router || !routerEntry) return { ok: false, code: 2, message: `no such task "${task}" in PRD router` };
+  const state = await readRouterState(root, homeSeg);
+  if (state.state !== "ok") return { ok: false, code: 2, message: describeRouterState(state, prdRouterPath(root, homeSeg)) };
+  const router = state.router;
+  const routerEntry = router[task];
+  if (!routerEntry) return { ok: false, code: 2, message: `no such task "${task}" in PRD router` };
 
   const taskFile = await readTaskFile(root, homeSeg, routerEntry.prd);
   if (!taskFile) return { ok: false, code: 2, message: `task PRD not found or malformed: ${routerEntry.prd}` };

@@ -4,7 +4,8 @@
  * router is found, exit 2 on an unresolved/ambiguous `--id`.
  */
 import { prdRouterPath } from "../../policy/prd/prd-paths";
-import { readAgentReport, readAllTaskFiles, readRouter } from "../../policy/prd/prd-io";
+import { readAgentReport, readAllTaskFiles, readRouterState } from "../../policy/prd/prd-io";
+import { describeRouterState } from "../../policy/prd/prd-router-state";
 import { crossCheckTask } from "../../policy/prd/prd-crosscheck";
 import { isCompacted, subTasksOf } from "../../policy/prd/prd-schema";
 import type { PrdAgentReportFile, PrdTaskFile } from "../../policy/prd/interfaces/types";
@@ -55,11 +56,12 @@ export async function runPrdStatus(argv: string[], cwd: string, env: NodeJS.Proc
   }
   const { root, homeSeg } = resolved;
 
-  const router = await readRouter(root, homeSeg);
-  if (!router) {
-    process.stderr.write(`no PRD router at ${prdRouterPath(root, homeSeg)}\n`);
+  const state = await readRouterState(root, homeSeg);
+  if (state.state !== "ok") {
+    process.stderr.write(`${describeRouterState(state, prdRouterPath(root, homeSeg))}\n`);
     return 1;
   }
+  const router = state.router;
 
   const taskFiles = await readAllTaskFiles(root, homeSeg, router);
   const agentNames = new Set<string>();

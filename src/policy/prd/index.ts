@@ -2,7 +2,7 @@
 export type {
   PrdAgentEntryCompacted, PrdAgentEntryExpanded, PrdAgentReportFile, PrdAgentSubEntry,
   PrdCrossCheckViolation, PrdIdentity, PrdOwnershipVerdict, PrdPathKind, PrdRouter,
-  PrdRouterEntry, PrdRouterStatus, PrdSubagentSlice, PrdSubStatus, PrdSubTask, PrdTaskAgentEntry,
+  PrdRouterEntry, PrdRouterSnapshot, PrdRouterState, PrdRouterStatus, PrdSubagentSlice, PrdSubStatus, PrdSubTask, PrdTaskAgentEntry,
   PrdTaskFile,
 } from "./interfaces/types";
 
@@ -29,8 +29,11 @@ export { canPromoteRouterEntry, compactAgentEntry, compactTaskFile } from "./prd
 export { agentSlice, agentSlices, joinContextResponses, renderAgentSliceMarkdown } from "./prd-context";
 
 export {
-  readAgentReport, readAgentReportSync, readAllTaskFiles, readRouter, readRouterSync,
-  readTaskFile, readTaskFileSync, writeAgentReport, writeRouter, writeTaskFile,
+  readAgentReport, readAgentReportSync, readAllTaskFiles, readRouter, readRouterSnapshotSync,
+  readRouterState, readRouterSync, readTaskFile, readTaskFileSync, writeAgentReport, writeRouter,
+  writeTaskFile,
 } from "./prd-io";
+
+export { classifyRouterText, describeRouterState, routerProblems } from "./prd-router-state";
 
 export { isPrdEnabled, isPrdFlagSet, prdProjectRoot, routerExistsSync } from "./prd-enabled";

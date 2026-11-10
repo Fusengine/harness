@@ -101,3 +101,16 @@ export type PrdPathKind =
   | { kind: "agentReport"; agent: string }
   | { kind: "docs"; task: string }
   | { kind: "other" };
+
+/** Four-way outcome of reading/classifying the router: absent, unparsable JSON, parsable but off-schema, or valid. */
+export type PrdRouterState =
+  | { state: "absent" }
+  | { state: "syntax"; error: string }
+  | { state: "schema"; problems: string[] }
+  | { state: "ok"; router: PrdRouter };
+
+/** The router file's raw text (`null` when absent or unreadable) together with its classified state. */
+export interface PrdRouterSnapshot {
+  text: string | null;
+  state: PrdRouterState;
+}
