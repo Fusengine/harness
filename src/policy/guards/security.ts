@@ -1,5 +1,11 @@
 import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
+import { isTempOnlyDelete } from "./security-temp-delete";
+
+/** Label of the system-directory delete block; the only one the temp-dir narrowing lifts. */
+const SYSTEM_DIR_LABEL = "DANGEROUS PATTERN: recursive delete of a system directory";
+/** Pattern of the system-directory delete block (shared by CRITICAL_PATTERNS and the temp-dir narrowing). */
+const SYSTEM_DIR_RE = /\brm\s+(?:-[a-z]*\s+)*-[a-z]*[rf][a-z]*\s+(?:-[a-z]+\s+)*\/(?:etc|usr|var|bin|sbin|boot|lib)\b/;
 
 /** A pattern paired with the violation label to name in the deny/ask reason. */
 export interface LabeledPattern {
@@ -19,7 +25,7 @@ export const CRITICAL_PATTERNS: LabeledPattern[] = [
   { re: /\bfdisk\b/, label: "CRITICAL: Detected dangerous command 'fdisk'" },
   { re: /\bdiskutil\s+(?:erase|partitionDisk)/i, label: "CRITICAL: Detected dangerous command 'diskutil erase'" },
   { re: /(?:>|>>)\s*\/dev\/(?:sda|hda|nvme)/, label: "DANGEROUS PATTERN: redirect to a raw disk device" },
-  { re: /\brm\s+(?:-[a-z]*\s+)*-[a-z]*[rf][a-z]*\s+(?:-[a-z]+\s+)*\/(?:etc|usr|var|bin|sbin|boot|lib)\b/, label: "DANGEROUS PATTERN: recursive delete of a system directory" },
+  { re: SYSTEM_DIR_RE, label: SYSTEM_DIR_LABEL },
   // Privilege escalation — DENY (parity: security_rules.PRIVILEGE_COMMANDS, has_critical=True).
   { re: /(?:^|[\s;|&])sudo(?:[\s;|&]|$)/, label: "PRIVILEGE ESCALATION: sudo" },
   { re: /(?:^|[\s;|&])su(?:[\s;|&]|$)/, label: "PRIVILEGE ESCALATION: su" },
@@ -72,9 +78,12 @@ function stripHeredoc(cmd: string): string {
 export function securityGuard(ctx: GuardContext): Prompt | null {
   if (ctx.tool !== "Bash" || !ctx.command) return null;
   const cmd: string = stripHeredoc(ctx.command);
-  const hasTrash: boolean = /trash/i.test(cmd);
+  // A plain `rm` of temp-dir children only (judged on the RAW command, so any heredoc keeps main's verdict): the
+  // system-directory block steps aside for the rm ask, which is then never trash-exempt. Otherwise identical to main.
+  const lifted: boolean = SYSTEM_DIR_RE.test(cmd) && isTempOnlyDelete(ctx.command);
+  const hasTrash: boolean = !lifted && /trash/i.test(cmd);
 
-  const critical: string[] = CRITICAL_PATTERNS.filter(({ re }) => re.test(cmd)).map((p) => p.label);
+  const critical: string[] = CRITICAL_PATTERNS.filter(({ re, label }) => re.test(cmd) && !(lifted && label === SYSTEM_DIR_LABEL)).map((p) => p.label);
   const ask: string[] = ASK_PATTERNS.filter(
     ({ re, label }) => re.test(cmd) && !(hasTrash && label.startsWith("DELETE: 'rm'")),
   ).map((p) => p.label);
