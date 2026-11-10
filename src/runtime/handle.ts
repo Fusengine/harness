@@ -10,6 +10,7 @@ import { fuseHarnessHome } from "./home-state";
 import { projectStateDir } from "./project-state-dir";
 import { designLifecycle } from "./design-lifecycle";
 import { promptSubmitContext } from "./inject-context";
+import { withBackgroundReports } from "./lifecycle/report-background";
 import { lifecycleStdout } from "./lifecycle-bridge";
 import { handlePre } from "./handle-pre";
 import { handlePost } from "./handle-post";
@@ -125,6 +126,18 @@ async function handleHookCore(id: string, payload: Record<string, unknown>, opts
 }
 
 /**
+ * Report recovery for a finished BACKGROUND sub-agent (its result arrives as a notification turn): Claude Code,
+ * core scope, UserPromptSubmit only. Runs AFTER the session registry so it appends to the final context and
+ * never changes what the turn already injects.
+ */
+function withBackgroundReport(outcome: HandleOutcome, payload: Record<string, unknown>, opts: HandleOptions): HandleOutcome {
+  if (opts.scope !== "core" || outcome.exit !== 0 || rawEventName(payload) !== "UserPromptSubmit") return outcome;
+  const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
+  const stdout = prompt ? withBackgroundReports(outcome.stdout, payload, prompt, opts.home) : outcome.stdout;
+  return stdout === outcome.stdout ? outcome : { ...outcome, stdout };
+}
+
+/**
  * Run one hook and adapt every Cursor scope outcome at the common runtime exit.
  * Other harnesses retain the core handler's stdout and exit status unchanged.
  * Cursor's shared `additional_context` budget context (see
@@ -142,7 +155,7 @@ export async function handleHook(id: string, payload: Record<string, unknown>, o
   const outcome = await handleHookCore(id, payload, opts);
   // Claude Code only: every injected block reaches the model once per session (inject-session/); other hosts untouched.
   // `motion` is excluded: its UserPromptSubmit text answers THIS prompt (approval feedback), it is not a static block.
-  if (id === "claude-code" && opts.scope !== "motion") return applySessionRegistry(outcome, payload, opts);
+  if (id === "claude-code" && opts.scope !== "motion") return withBackgroundReport(applySessionRegistry(outcome, payload, opts), payload, opts);
   if (id !== "cursor") return outcome;
   const eventName = rawEventName(payload);
   const cursorEvent = normalizeEvent(id, payload);

@@ -61,13 +61,14 @@ export function lifecycleStdout(payload: Record<string, unknown>, cwd: string, s
  * @param event - The normalized event.
  * @param now - Clock.
  * @param id - Harness target id (defaults to "claude-code" — zero-regression default).
+ * @param cwd - Hook cwd (project-root fallback for the edit stamp; the event's own `cwd` wins).
  * @returns The extra stdout (possibly empty).
  */
-export async function postEditContext(scope: PluginScope, event: NormalizedEvent, now: number, id: string = "claude-code"): Promise<string> {
+export async function postEditContext(scope: PluginScope, event: NormalizedEvent, now: number, id: string = "claude-code", cwd?: string): Promise<string> {
   if (scope !== "core" || !event.filePath) return "";
   if (event.tool === "Read") return autoDocumentRead(event.filePath, now, id);
   if (event.tool !== "Write" && event.tool !== "Edit") return "";
-  const sniper = trackSessionChanges(event.sessionId, event.filePath, undefined, now);
+  const sniper = trackSessionChanges(event.sessionId, event.filePath, undefined, now, { agentId: event.agentId, cwd: event.cwd ?? cwd });
   const lint = postEditTypescript(event.filePath);
   if (!sniper || !lint) return sniper || lint;
   return contextResponse("PostToolUse", `${additionalContextOf(sniper)}\n\n${additionalContextOf(lint)}`);
