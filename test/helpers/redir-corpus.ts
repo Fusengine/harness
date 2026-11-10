@@ -1,3 +1,11 @@
+import { bashWriteGuard } from "../../src/policy/guards/bash-write";
+
+/** Verdict of the Bash write guard for `command` (`allow` = no Prompt), optionally inside a scratchpad window. */
+export function guardVerdict(command: string, scratchpadDir?: string): "allow" | "ask" | "block" {
+  const r = bashWriteGuard({ tool: "Bash", command, scratchpadDir });
+  return r === null ? "allow" : r.kind === "ask" ? "ask" : "block";
+}
+
 /** Fake session scratchpad dir (literal, never touched on disk) used by the redirect-narrowing corpus. */
 export const D = "/private/tmp/claude-501/-Users-me-proj/aaaaaaaa-1111-4222-8333-bbbbbbbbbbbb/scratchpad";
 /** Fake project root used as the "must never be written silently" target. */

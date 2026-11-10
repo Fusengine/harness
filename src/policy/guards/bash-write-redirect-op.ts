@@ -1,7 +1,8 @@
 import type { ShellRedirect } from "./bash-write-redirects";
 
-/** Read one shell word starting at `start`: strips quotes/escapes, stops at whitespace or `; & | < >`. */
-function readTarget(input: string, start: number, end: number): string {
+/** Read one shell word starting at `start`: strips quotes/escapes, stops at whitespace or `; & | < >`
+ * (and at an unquoted, unescaped `)` when `stopParen` is set). */
+function readTarget(input: string, start: number, end: number, stopParen = false): string {
   let out = "";
   let quote: "'" | '"' | null = null;
   for (let i = start; i < end; i++) {
@@ -16,10 +17,20 @@ function readTarget(input: string, start: number, end: number): string {
       continue;
     }
     if (ch === "'" || ch === '"') { quote = ch; continue; }
-    if (/\s|[;&|<>]/.test(ch)) break;
+    if (/\s|[;&|<>]/.test(ch) || (stopParen && ch === ")")) break;
     out += ch;
   }
   return out;
+}
+
+/**
+ * The word ends at a glued `)` (`(cmd 2>&1)`, `(cmd >/dev/null)`) only for the two forms that write no
+ * real file: a descriptor dup/close (when `canDup`) or `/dev/null`. Any other target keeps its legacy
+ * `)`-glued reading, so safe-path / code-file / protected-path verdicts are exactly as before.
+ */
+function tightTarget(input: string, start: number, end: number, legacy: string, canDup: boolean): string {
+  const tight = readTarget(input, start, end, true);
+  return tight === "/dev/null" || (canDup && FD_DUP.test(tight)) ? tight : legacy;
 }
 
 /** `>&word` where word is plain digits or `-` duplicates/closes a descriptor (no file is written).
@@ -66,11 +77,11 @@ export function parseOutputRedirect(input: string, i: number, start: number, end
     let canDup = afterOp === i + 1;
     if (input[cursor] === "|" || input[cursor] === "!") { cursor++; canDup = false; }
     while (/\s/.test(input[cursor] ?? "")) cursor++;
-    const target = readTarget(input, cursor, end);
+    const target = tightTarget(input, cursor, end, readTarget(input, cursor, end), canDup);
     if (!target || (canDup && FD_DUP.test(target))) return none;
     return { redirect: { start: opStart, operator: input.slice(opStart, ampEnd + 1), target, extended: true }, opEnd: ampEnd };
   }
-  const target = readTarget(input, cursor, end);
+  const target = tightTarget(input, cursor, end, readTarget(input, cursor, end), false);
   if (!target) return none;
   const extended = run > 0 || undefined;
   const operator = input.slice(opStart, afterOp);
