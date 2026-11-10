@@ -14,7 +14,7 @@ const sid = (label: string): string => `${label}-${randomUUID()}`;
 const pre = (id: string, s: string, command: string) => ({ hook_event_name: "PreToolUse", session_id: s, tool_use_id: randomUUID(), tool_name: "Bash", tool_input: { command } });
 const submit = (s: string, prompt: string) => ({ hook_event_name: "UserPromptSubmit", session_id: s, prompt });
 
-/** Extract the 4-hex-char code from a "Pour autoriser, réponds : CONFIRM xxxx" deny message. */
+/** Extract the 4-hex-char code from a "To allow, reply: CONFIRM xxxx" deny message. */
 function codeFromDeny(stdout: string): string {
   const m = stdout.match(/CONFIRM ([0-9a-f]{4})/i);
   const code = m?.[1];
@@ -37,7 +37,7 @@ test("claude-code untouched: native ask stays ask, no CONFIRM text ever added", 
   const out = await handleHook("claude-code", pre("claude-code", s, "git commit -m confirm-claude"), opts);
   const j = JSON.parse(out.stdout);
   expect(j.hookSpecificOutput.permissionDecision).toBe("ask");
-  expect(out.stdout).not.toContain("Pour autoriser");
+  expect(out.stdout).not.toContain("To allow");
 });
 
 test("confirm the exact action -> next identical Bash call is allowed", async () => {
