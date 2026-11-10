@@ -1,0 +1,631 @@
+{
+ "js-root": {
+  "language": "javascript",
+  "summary": {
+   "critical": 20,
+   "high": 12,
+   "medium": 3,
+   "low": 0,
+   "total": 35
+  },
+  "findings": [
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "child_process",
+    "<ROOT>/a.js",
+    5
+   ],
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "child_process",
+    "<ROOT>/sub/deep/b.js",
+    13
+   ],
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "child_process",
+    "<ROOT>/sub/deep/b.js",
+    5
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/a.js",
+    3
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/big.js",
+    120001
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/bin.js",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/bin.js",
+    2
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/crlf.js",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/long.js",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/multi.js",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/sub/deep/b.js",
+    11
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/sub/deep/b.js",
+    3
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(",
+    "<ROOT>/x.min.js",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "new Function\\(",
+    "<ROOT>/a.js",
+    4
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "new Function\\(",
+    "<ROOT>/multi.js",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "new Function\\(",
+    "<ROOT>/sub/deep/b.js",
+    12
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "new Function\\(",
+    "<ROOT>/sub/deep/b.js",
+    4
+   ],
+   [
+    "CRITICAL",
+    "SECRETS",
+    "AKIA[0-9A-Z]{16}",
+    "<ROOT>/a.js",
+    8
+   ],
+   [
+    "CRITICAL",
+    "SECRETS",
+    "AKIA[0-9A-Z]{16}",
+    "<ROOT>/sub/deep/b.js",
+    16
+   ],
+   [
+    "CRITICAL",
+    "SECRETS",
+    "AKIA[0-9A-Z]{16}",
+    "<ROOT>/sub/deep/b.js",
+    8
+   ],
+   [
+    "HIGH",
+    "CMD_INJECTION",
+    "shell:\\s*true",
+    "<ROOT>/a.js",
+    6
+   ],
+   [
+    "HIGH",
+    "CMD_INJECTION",
+    "shell:\\s*true",
+    "<ROOT>/sub/deep/b.js",
+    14
+   ],
+   [
+    "HIGH",
+    "CMD_INJECTION",
+    "shell:\\s*true",
+    "<ROOT>/sub/deep/b.js",
+    6
+   ],
+   [
+    "HIGH",
+    "XSS",
+    "dangerouslySetInnerHTML",
+    "<ROOT>/a.js",
+    2
+   ],
+   [
+    "HIGH",
+    "XSS",
+    "dangerouslySetInnerHTML",
+    "<ROOT>/sub/deep/b.js",
+    10
+   ],
+   [
+    "HIGH",
+    "XSS",
+    "dangerouslySetInnerHTML",
+    "<ROOT>/sub/deep/b.js",
+    2
+   ],
+   [
+    "HIGH",
+    "XSS",
+    "innerHTML\\s*=",
+    "<ROOT>/a.js",
+    1
+   ],
+   [
+    "HIGH",
+    "XSS",
+    "innerHTML\\s*=",
+    "<ROOT>/crlf.js",
+    2
+   ],
+   [
+    "HIGH",
+    "XSS",
+    "innerHTML\\s*=",
+    "<ROOT>/long.js",
+    1
+   ],
+   [
+    "HIGH",
+    "XSS",
+    "innerHTML\\s*=",
+    "<ROOT>/multi.js",
+    1
+   ],
+   [
+    "HIGH",
+    "XSS",
+    "innerHTML\\s*=",
+    "<ROOT>/sub/deep/b.js",
+    1
+   ],
+   [
+    "HIGH",
+    "XSS",
+    "innerHTML\\s*=",
+    "<ROOT>/sub/deep/b.js",
+    9
+   ],
+   [
+    "MEDIUM",
+    "WEAK_CRYPTO",
+    "Math\\.random\\(\\)",
+    "<ROOT>/a.js",
+    7
+   ],
+   [
+    "MEDIUM",
+    "WEAK_CRYPTO",
+    "Math\\.random\\(\\)",
+    "<ROOT>/sub/deep/b.js",
+    15
+   ],
+   [
+    "MEDIUM",
+    "WEAK_CRYPTO",
+    "Math\\.random\\(\\)",
+    "<ROOT>/sub/deep/b.js",
+    7
+   ]
+  ]
+ },
+ "php-root": {
+  "language": "php",
+  "summary": {
+   "critical": 8,
+   "high": 2,
+   "medium": 0,
+   "low": 0,
+   "total": 10
+  },
+  "findings": [
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|assert\\(",
+    "<ROOT>/a.php",
+    3
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|assert\\(",
+    "<ROOT>/a.php",
+    5
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|assert\\(",
+    "<ROOT>/views/b.blade.php",
+    3
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|assert\\(",
+    "<ROOT>/views/b.blade.php",
+    5
+   ],
+   [
+    "CRITICAL",
+    "RCE",
+    "shell_exec|system\\(|passthru\\(",
+    "<ROOT>/a.php",
+    2
+   ],
+   [
+    "CRITICAL",
+    "RCE",
+    "shell_exec|system\\(|passthru\\(",
+    "<ROOT>/a.php",
+    6
+   ],
+   [
+    "CRITICAL",
+    "RCE",
+    "shell_exec|system\\(|passthru\\(",
+    "<ROOT>/views/b.blade.php",
+    2
+   ],
+   [
+    "CRITICAL",
+    "RCE",
+    "shell_exec|system\\(|passthru\\(",
+    "<ROOT>/views/b.blade.php",
+    6
+   ],
+   [
+    "HIGH",
+    "SQL_INJECTION",
+    "mysql_query\\(",
+    "<ROOT>/a.php",
+    4
+   ],
+   [
+    "HIGH",
+    "SQL_INJECTION",
+    "mysql_query\\(",
+    "<ROOT>/views/b.blade.php",
+    4
+   ]
+  ]
+ },
+ "py-root": {
+  "language": "python",
+  "summary": {
+   "critical": 12,
+   "high": 6,
+   "medium": 0,
+   "low": 0,
+   "total": 18
+  },
+  "findings": [
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "os\\.system\\(|subprocess.*shell=True",
+    "<ROOT>/a.py",
+    3
+   ],
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "os\\.system\\(|subprocess.*shell=True",
+    "<ROOT>/a.py",
+    4
+   ],
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "os\\.system\\(|subprocess.*shell=True",
+    "<ROOT>/pkg/b.py",
+    3
+   ],
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "os\\.system\\(|subprocess.*shell=True",
+    "<ROOT>/pkg/b.py",
+    4
+   ],
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "os\\.system\\(|subprocess.*shell=True",
+    "<ROOT>/venv-less/c.py",
+    3
+   ],
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "os\\.system\\(|subprocess.*shell=True",
+    "<ROOT>/venv-less/c.py",
+    4
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|exec\\(",
+    "<ROOT>/a.py",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|exec\\(",
+    "<ROOT>/a.py",
+    2
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|exec\\(",
+    "<ROOT>/pkg/b.py",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|exec\\(",
+    "<ROOT>/pkg/b.py",
+    2
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|exec\\(",
+    "<ROOT>/venv-less/c.py",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|exec\\(",
+    "<ROOT>/venv-less/c.py",
+    2
+   ],
+   [
+    "HIGH",
+    "DESERIALIZATION",
+    "pickle\\.loads\\(",
+    "<ROOT>/a.py",
+    5
+   ],
+   [
+    "HIGH",
+    "DESERIALIZATION",
+    "pickle\\.loads\\(",
+    "<ROOT>/pkg/b.py",
+    5
+   ],
+   [
+    "HIGH",
+    "DESERIALIZATION",
+    "pickle\\.loads\\(",
+    "<ROOT>/venv-less/c.py",
+    5
+   ],
+   [
+    "HIGH",
+    "TLS",
+    "verify=False|ssl\\.CERT_NONE",
+    "<ROOT>/a.py",
+    6
+   ],
+   [
+    "HIGH",
+    "TLS",
+    "verify=False|ssl\\.CERT_NONE",
+    "<ROOT>/pkg/b.py",
+    6
+   ],
+   [
+    "HIGH",
+    "TLS",
+    "verify=False|ssl\\.CERT_NONE",
+    "<ROOT>/venv-less/c.py",
+    6
+   ]
+  ]
+ },
+ "pyproject-root": {
+  "language": "python",
+  "summary": {
+   "critical": 4,
+   "high": 2,
+   "medium": 0,
+   "low": 0,
+   "total": 6
+  },
+  "findings": [
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "os\\.system\\(|subprocess.*shell=True",
+    "<ROOT>/a.py",
+    3
+   ],
+   [
+    "CRITICAL",
+    "CMD_INJECTION",
+    "os\\.system\\(|subprocess.*shell=True",
+    "<ROOT>/a.py",
+    4
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|exec\\(",
+    "<ROOT>/a.py",
+    1
+   ],
+   [
+    "CRITICAL",
+    "CODE_EXEC",
+    "eval\\(|exec\\(",
+    "<ROOT>/a.py",
+    2
+   ],
+   [
+    "HIGH",
+    "DESERIALIZATION",
+    "pickle\\.loads\\(",
+    "<ROOT>/a.py",
+    5
+   ],
+   [
+    "HIGH",
+    "TLS",
+    "verify=False|ssl\\.CERT_NONE",
+    "<ROOT>/a.py",
+    6
+   ]
+  ]
+ },
+ "swift-root": {
+  "language": "swift",
+  "summary": {
+   "critical": 0,
+   "high": 4,
+   "medium": 2,
+   "low": 0,
+   "total": 6
+  },
+  "findings": [
+   [
+    "HIGH",
+    "INSECURE_STORAGE",
+    "UserDefaults.*password|token|secret",
+    "<ROOT>/S/a.swift",
+    1
+   ],
+   [
+    "HIGH",
+    "INSECURE_STORAGE",
+    "UserDefaults.*password|token|secret",
+    "<ROOT>/S/b.swift",
+    1
+   ],
+   [
+    "HIGH",
+    "WEAK_KEYCHAIN",
+    "kSecAttrAccessibleAlways",
+    "<ROOT>/S/a.swift",
+    3
+   ],
+   [
+    "HIGH",
+    "WEAK_KEYCHAIN",
+    "kSecAttrAccessibleAlways",
+    "<ROOT>/S/b.swift",
+    3
+   ],
+   [
+    "MEDIUM",
+    "INSECURE_HTTP",
+    "\"http:\\/\\/",
+    "<ROOT>/S/a.swift",
+    2
+   ],
+   [
+    "MEDIUM",
+    "INSECURE_HTTP",
+    "\"http:\\/\\/",
+    "<ROOT>/S/b.swift",
+    2
+   ]
+  ]
+ },
+ "go-root": {
+  "language": "go",
+  "summary": {
+   "critical": 0,
+   "high": 0,
+   "medium": 0,
+   "low": 0,
+   "total": 0
+  },
+  "findings": []
+ },
+ "rust-root": {
+  "language": "rust",
+  "summary": {
+   "critical": 0,
+   "high": 0,
+   "medium": 0,
+   "low": 0,
+   "total": 0
+  },
+  "findings": []
+ },
+ "unknown-root": {
+  "language": "unknown",
+  "summary": {
+   "critical": 0,
+   "high": 0,
+   "medium": 0,
+   "low": 0,
+   "total": 0
+  },
+  "findings": []
+ },
+ "empty": {
+  "language": "unknown",
+  "summary": {
+   "critical": 0,
+   "high": 0,
+   "medium": 0,
+   "low": 0,
+   "total": 0
+  },
+  "findings": []
+ }
+}

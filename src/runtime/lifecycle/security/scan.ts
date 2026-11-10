@@ -1,76 +1,78 @@
 /**
  * @module security/scan
- * OWASP vulnerability scanner. Ports the Python `security-scan.py`: detect the
- * project language, walk source files (excluding vendored/build dirs), match the
- * per-language {@link getPatterns} rules, and aggregate a JSON report. Invoked by
- * the `harness scan` CLI command (skill `/fuse-security:scan`), NOT a hook.
+ * OWASP vulnerability scanner (`harness scan <dir>`, skill `/fuse-security:scan`;
+ * NOT a hook). One walk, one read per file: each file is classified by
+ * extension (shared table `util/source-languages`) and matched against its
+ * language rules plus the language-agnostic secrets. The report keeps the
+ * legacy keys byte-compatible and appends `coverage` (and per-finding
+ * `id`, `cwe`, `owasp`, `language`).
  * @packageDocumentation
  */
-import { existsSync, readdirSync, readFileSync, type Dirent } from "node:fs";
-import { join } from "node:path";
-import { getPatterns, type ScanPattern, type Severity } from "./scan-patterns";
+import { extname } from "node:path";
+import { CoverageBuilder } from "./scan/coverage";
+import { GENERATED_RE, KNOWN_UNSUPPORTED, LEGACY_EXT } from "./scan/constants";
+import { readCandidate } from "./scan/filter";
+import { detectLanguage, languageOf } from "./scan/languages";
+import { resolveScanLimits } from "./scan/limits";
+import { scanText } from "./scan/match";
+import { allPatterns, patternsFor } from "./scan/patterns";
+import type { Finding, ScanReport } from "./scan/types";
+import { walkTree } from "./scan/walk";
 
-const EXCLUDE_RE = /(^|\/)(node_modules|vendor|\.git|dist|build)(\/|$)/;
-const LANG_FILES: readonly (readonly [string, string])[] = [
-  ["package.json", "javascript"], ["composer.json", "php"], ["requirements.txt", "python"],
-  ["pyproject.toml", "python"], ["Package.swift", "swift"], ["go.mod", "go"], ["Cargo.toml", "rust"],
-];
+export type { Coverage, Finding, ScanLimits, ScanReport } from "./scan/types";
+export { detectLanguage };
 
-/** A single vulnerability match in the scanned tree. */
-export interface Finding {
-  severity: Severity; category: string; pattern: string; file: string; line: number;
-}
+interface Raw { ord: number; seq: number; finding: Finding }
 
-/** The full scan report (mirrors the Python JSON shape). */
-export interface ScanReport {
-  language: string; directory: string;
-  summary: Record<string, number>; findings: Finding[];
-}
-
-/** Detect the project language from its config files (first match wins). */
-export function detectLanguage(dir: string): string {
-  for (const [file, lang] of LANG_FILES) if (existsSync(join(dir, file))) return lang;
-  return "unknown";
-}
-
-/** Recursively collect files whose name ends with `ext`, skipping vendored dirs. */
-function collectFiles(dir: string, ext: string, out: string[] = []): string[] {
-  let entries: Dirent[];
-  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
-  for (const e of entries) {
-    const full = join(dir, e.name);
-    if (EXCLUDE_RE.test(full)) continue;
-    if (e.isDirectory()) collectFiles(full, ext, out);
-    else if (e.name.endsWith(ext)) out.push(full);
-  }
-  return out;
-}
-
-/** Apply one pattern to every matching file and collect line-level findings. */
-function scanPattern(dir: string, p: ScanPattern): Finding[] {
-  const ext = p.glob.replace(/^\*/, "");
-  const findings: Finding[] = [];
-  for (const file of collectFiles(dir, ext)) {
-    let text: string;
-    try { text = readFileSync(file, "utf8"); } catch { continue; }
-    text.split("\n").forEach((line, i) => {
-      if (p.regex.test(line)) findings.push({ severity: p.severity, category: p.category, pattern: p.regex.source, file, line: i + 1 });
-    });
-  }
-  return findings;
-}
-
-/** Run the OWASP scan over `dir` and return the aggregated {@link ScanReport}. */
-export function runSecurityScan(dir: string): ScanReport {
+/**
+ * Run the OWASP scan over `dir` and return the aggregated {@link ScanReport}.
+ * @param dir - directory to scan
+ * @param env - environment carrying the optional `FUSE_SCAN_*` limits
+ */
+export function runSecurityScan(dir: string, env: Record<string, string | undefined> = process.env): ScanReport {
+  const limits = resolveScanLimits(env);
+  const cov = new CoverageBuilder();
+  const order = new Map(allPatterns().map((p, i) => [p.id, i]));
+  const raws: Raw[] = [];
+  let newFiles = 0;
+  let newBytes = 0;
+  let seq = 0;
   const language = detectLanguage(dir);
+  const legacyExt = LEGACY_EXT[language];
+  walkTree(dir, {
+    excluded: () => { cov.skipped.excludedDirs++; },
+    project: (root, marker) => cov.addProject(root, marker),
+    file: (path, name) => {
+      const lang = languageOf(name);
+      if (!lang) {
+        const ext = extname(name).toLowerCase();
+        if (GENERATED_RE.test(name)) cov.skipped.generated++;
+        else if (KNOWN_UNSUPPORTED.has(ext)) cov.addUnsupported(ext);
+        return;
+      }
+      const legacy = legacyExt !== undefined && name.endsWith(legacyExt);
+      if (!legacy && (newFiles >= limits.maxFiles || newBytes >= limits.maxTotalBytes)) { cov.skipped.capped = true; return; }
+      const c = readCandidate(path, name, limits, legacy);
+      if ("skip" in c) { cov.skipped[c.skip]++; return; }
+      if (!legacy) { newFiles++; newBytes += c.bytes; }
+      const patterns = patternsFor(lang, legacy);
+      cov.addFile(lang, c.bytes, patterns.length);
+      const { hits, longLines } = scanText(c.text, patterns, limits.maxLineChars);
+      cov.skipped.longLines += longLines;
+      seq++;
+      for (const { pattern: p, line } of hits) {
+        const finding: Finding = {
+          severity: p.severity, category: p.category, pattern: p.regex.source, file: path, line, id: p.id, cwe: p.cwe,
+          ...(p.owasp ? { owasp: p.owasp } : {}), language: lang,
+        };
+        raws.push({ ord: order.get(p.id) ?? 0, seq, finding });
+      }
+    },
+  }, legacyExt);
+  raws.sort((a, b) => a.ord - b.ord || a.seq - b.seq || a.finding.line - b.finding.line);
+  const findings = raws.map((r) => r.finding);
   const counts: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0 };
-  const findings: Finding[] = [];
-  for (const p of getPatterns(language)) {
-    const hits = scanPattern(dir, p);
-    findings.push(...hits);
-    const key = p.severity.toLowerCase();
-    counts[key] = (counts[key] ?? 0) + hits.length;
-  }
+  for (const f of findings) { const k = f.severity.toLowerCase(); counts[k] = (counts[k] ?? 0) + 1; }
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  return { language, directory: dir, summary: { ...counts, total }, findings };
+  return { language, directory: dir, summary: { ...counts, total }, findings, coverage: cov.finalize(limits) };
 }
