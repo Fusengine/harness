@@ -10,6 +10,17 @@ function escapeRe(s: string): string {
 }
 
 /**
+ * Whether `text` opens a `---` frontmatter block that is not closed within it
+ * (a truncated prefix cut inside the YAML): its content must never be read as
+ * Markdown body.
+ * @param text - The document text (possibly a prefix).
+ * @returns True when a leading `---` fence has no closing `---`.
+ */
+export function hasUnclosedFrontmatter(text: string): boolean {
+  return /^---\s*\n/.test(text) && !/^---\s*\n[\s\S]*?\n---/.test(text);
+}
+
+/**
  * Extract a single frontmatter field's value from `text`. Strips surrounding
  * quotes; skips YAML block-scalar markers. Returns "" when absent.
  * @param text - The full document text.

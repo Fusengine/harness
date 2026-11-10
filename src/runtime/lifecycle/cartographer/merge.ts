@@ -2,20 +2,22 @@
  * Index merge — preserves enriched descriptions across regenerations. Ports
  * `merge_index.py` (merge_lines + .enriched.json sidecar).
  */
-import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseEntry } from "../../../policy/cartographer/entry";
+import { readSmallRegularFile } from "./bounded-read";
 
 /**
- * Load the `.enriched.json` sidecar's `entries` map for an output index.
+ * Load the `.enriched.json` sidecar's `entries` map for an output index. A
+ * missing, non-regular (e.g. a symlink to a device) or oversize sidecar counts
+ * as absent.
  * @param outputIndexPath - Path to the index.md being written.
  * @returns The path→desc enrichment map (possibly empty).
  */
 export function loadEnriched(outputIndexPath: string): Record<string, string> {
-  const sidecar = join(dirname(outputIndexPath), ".enriched.json");
+  const raw = readSmallRegularFile(join(dirname(outputIndexPath), ".enriched.json"));
+  if (raw === undefined) return {};
   try {
-    if (!existsSync(sidecar)) return {};
-    const data = JSON.parse(readFileSync(sidecar, "utf-8")) as { entries?: Record<string, string> };
+    const data = JSON.parse(raw) as { entries?: Record<string, string> };
     return data.entries ?? {};
   } catch {
     return {};
@@ -24,7 +26,8 @@ export function loadEnriched(outputIndexPath: string): Record<string, string> {
 
 /**
  * Merge freshly generated lines with prior descriptions: enriched sidecar wins,
- * else a longer pre-existing description is preserved.
+ * else a longer pre-existing description is preserved. A missing, non-regular
+ * or oversize existing index is treated as absent (fresh generation).
  * @param newLines - The freshly generated index lines.
  * @param outputIndexPath - Path to the existing index.md (if any).
  * @returns The merged lines.
@@ -32,13 +35,9 @@ export function loadEnriched(outputIndexPath: string): Record<string, string> {
 export function mergeLines(newLines: string[], outputIndexPath: string): string[] {
   const enriched = loadEnriched(outputIndexPath);
   const existingDescs: Record<string, string> = {};
-  if (existsSync(outputIndexPath)) {
-    try {
-      for (const line of readFileSync(outputIndexPath, "utf-8").split("\n")) {
-        const e = parseEntry(line);
-        if (e) existingDescs[e.path] = e.desc;
-      }
-    } catch { /* ignore */ }
+  for (const line of (readSmallRegularFile(outputIndexPath) ?? "").split("\n")) {
+    const e = parseEntry(line);
+    if (e) existingDescs[e.path] = e.desc;
   }
   return newLines.map((line) => {
     const e = parseEntry(line);

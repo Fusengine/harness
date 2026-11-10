@@ -49,6 +49,7 @@ Exemptions: store- and query-definition files are not hooks (the hook rule skips
 | `FUSE_CONVENTIONS_MODE` | `deny` | `advisory` = opt-out observation mode (`inform`); any other/absent value blocks |
 | `FUSE_ENFORCE_TTL_SEC` | `120` | APEX freshness window (see `src/config/ttl.ts`) |
 | `FUSE_HOOK_STDIN_MAX_BYTES` | `16777216` (16 MiB) | Hook stdin cap: bounded read; oversized payload on a blockable event is denied uninspected (fail-closed), observation-only events stay neutral |
+| `FUSE_CARTO_FULL_READ_MAX_BYTES` | `1048576` (1 MiB) | Cartographer description read: files up to this size are read whole, larger ones only their first `cap` bytes cut at the last newline (binary-looking head, or a `.md` frontmatter not closed in the prefix → no description); the merge step also treats an existing `index.md` / `.enriched.json` that is not a regular file or exceeds the cap as absent; absent/invalid → default (see `src/runtime/lifecycle/cartographer/bounded-read.ts`) |
 
 ## Special cases and voluntary gaps
 

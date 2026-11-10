@@ -1,47 +1,30 @@
 /**
  * Filesystem helpers for the cartographer tree walk. Ports the fs parts of
- * `describe.py` (file desc) and `write_recursive.py` (children + counts).
+ * `describe.py` (file desc) and `write_recursive.py` (children).
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { extname, join } from "node:path";
-import { descFromText } from "../../../policy/cartographer/describe";
-import { parseField } from "../../../policy/cartographer/frontmatter";
+import { descFromText, isDescribableSuffix } from "../../../policy/cartographer/describe";
+import { hasUnclosedFrontmatter, parseField } from "../../../policy/cartographer/frontmatter";
+import { detach, readDescription } from "./bounded-read";
 
 /**
- * Read a file and derive its one-line description (frontmatter / heading /
- * comment). "" on any error or when nothing is found.
+ * Derive a file's one-line description (frontmatter / heading / comment). The
+ * extension is checked first: files that cannot have a description (pdf, png,
+ * unknown extensions, ...) are never opened. Reads are bounded
+ * (see {@link readDescription}); a truncated `.md` whose frontmatter is not closed
+ * in the prefix gets no description. "" on any error or when nothing is found.
  * @param filePath - Absolute path to the file.
  * @returns The description, or "".
  */
 export function getFileDesc(filePath: string): string {
-  let text = "";
-  try {
-    text = readFileSync(filePath, "utf-8");
-  } catch {
-    return "";
-  }
   const suffix = extname(filePath);
+  if (!isDescribableSuffix(suffix)) return "";
+  const { text, truncated } = readDescription(filePath);
+  if (!text) return "";
+  if (truncated && suffix === ".md" && hasUnclosedFrontmatter(text)) return "";
   const mdField = suffix === ".md" ? parseField(text, "description") : "";
-  return descFromText(suffix, text, mdField);
-}
-
-/**
- * Recursively count files whose relative path parts are all visible (no leading
- * "." or "_") and none excluded. Best-effort (partial count on errors).
- * @param dir - Directory to count under.
- * @param exclude - Directory/name set to skip.
- * @returns The file count.
- */
-export function countFiles(dir: string, exclude: ReadonlySet<string>): number {
-  let total = 0;
-  try {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      if (e.name.startsWith(".") || e.name.startsWith("_") || exclude.has(e.name)) continue;
-      if (e.isDirectory()) total += countFiles(join(dir, e.name), exclude);
-      else if (e.isFile()) total += 1;
-    }
-  } catch { /* best effort */ }
-  return total;
+  return detach(descFromText(suffix, text, mdField)); // a slice would pin the whole file text in memory
 }
 
 /** Absolute children of `source`, split into dirs/files, sorted by full path. */

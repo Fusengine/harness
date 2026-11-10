@@ -2,12 +2,13 @@
  * Plugin discovery (fs). Ports `detect_plugins.py`: marketplace `plugins` dir
  * resolution + `plugin.json` meta reading.
  */
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { HOME_DIR } from "../../../config/dotenv";
 import { detectHarness } from "../../../detect/harness";
 import type { HarnessId } from "../../../detect/harness";
+import { capPluginString, readSmallRegularFile } from "./bounded-read";
 
 /** Sorted entry names of `dir` (alpha, byte-order), or `[]` on error. */
 function sortedNames(dir: string): string[] {
@@ -25,10 +26,13 @@ function sortedNames(dir: string): string[] {
  */
 export function readPluginMeta(pluginPath: string): [string, string] {
   const pj = join(pluginPath, ".claude-plugin", "plugin.json");
-  if (!existsSync(pj)) return ["", ""];
+  const raw = readSmallRegularFile(pj);
+  if (raw === undefined) return ["", ""];
   try {
-    const meta = JSON.parse(readFileSync(pj, "utf-8")) as { version?: string; name?: string };
-    return [meta.version ?? "", meta.name ?? ""];
+    const meta = JSON.parse(raw) as { version?: string; name?: string };
+    // untrusted strings: capped (a non-string value counts as absent)
+    const str = (v: unknown): string => (typeof v === "string" || typeof v === "number" ? capPluginString(String(v)) : "");
+    return [str(meta.version), str(meta.name)];
   } catch {
     return ["", ""];
   }
