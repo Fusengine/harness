@@ -15,7 +15,7 @@ import { homedir } from "node:os";
 import { systemMessage } from "../../adapters/claude";
 import { loadSessionState, sanitizeSessionId } from "../home-state";
 import { oncePerWindow } from "../inject-dedup";
-import { defaultStateDir } from "../paths";
+import { projectStateDir } from "../project-state-dir";
 import { notify } from "../notifications";
 import { validateTeammateOutput } from "./teammate-idle";
 
@@ -50,7 +50,7 @@ export function teammateIdleContext(data: Record<string, unknown>, cwd: string, 
   let notice = "";
   if (sessionId) {
     const missing = missingDeliverables(sessionId, home);
-    if (missing.length > 0 && oncePerWindow(`idle:${sessionId}:${teammate}`, IDLE_DEDUP_MS, { now, dir: defaultStateDir(cwd) })) {
+    if (missing.length > 0 && oncePerWindow(`idle:${sessionId}:${teammate}`, IDLE_DEDUP_MS, { now, dir: projectStateDir(cwd) })) {
       notice = `Teammate '${teammate}' idle but expected deliverable(s) not found on disk: ${missing.slice(0, 5).join(", ")} — verify before treating as done.`;
     }
   }

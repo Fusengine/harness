@@ -12,7 +12,7 @@ import { renderInform } from "../../inform";
 import { projectRoot } from "../../../util/project-root";
 import { atomicWrite } from "../../../util/json-io";
 import { curateLessons } from "../aipilot/curate-lessons";
-import { compressInjection } from "../aipilot/lesson-inject";
+import { fitLessons } from "./fit-lessons";
 import { capFragment } from "../../inject-budget";
 import { lessonsArchiveFileFor, lessonsFileFor } from "./state";
 import { markWrite, remindWrite } from "./reminder";
@@ -54,7 +54,7 @@ function injectMemory(cwd: string, event: string, now: number, id: string): stri
   if (!content) return "";
   const { content: curated, archive, report } = curateLessons(content, now, root);
   if (curated !== content) content = persistCuration(file, root, curated, archive, content);
-  const body = capFragment("lessons", compressInjection(content));
+  const body = capFragment("lessons", fitLessons(content));
   const ctx = `Project lessons — never reproduce these:\n${body}\nYou may append OR refine/merge/dedupe bullets in MEMORY/LESSON.md — caveman style: telegraphic, no filler, never drop not/never/no/only, keep commands/paths/numbers verbatim.`;
   const notice = report ? `lessons injected\nLESSON.md curation:\n${report}` : "lessons injected";
   return renderInform(id, event, ctx, notice);

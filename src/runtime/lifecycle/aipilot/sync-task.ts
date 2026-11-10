@@ -1,7 +1,7 @@
 /**
  * PostToolUse (matcher "TaskCreate|TaskUpdate") for the ai-pilot scope:
- * synchronize Claude task tools with `.claude/apex/task.json` and prompt an
- * auto-commit on completion when git changes are detected. Ports
+ * synchronize Claude task tools with `.claude/apex/task.json` and remind of a
+ * WIP commit (via the commit agent) on completion when git changes are detected. Ports
  * `sync-task-tracking.ts`.
  */
 import { existsSync } from "node:fs";
@@ -28,7 +28,7 @@ async function onComplete(taskFile: string, taskId: string, projectRoot: string)
   }
   const data = await readJsonFile<ApexTaskFile>(taskFile);
   const subject = data?.tasks[taskId]?.subject ?? "Task";
-  return contextResponse("PostToolUse", `Task #${taskId} completed: ${subject}\n\nChanges detected. MANDATORY: Run /fuse-commit-pro:commit to commit with smart detection.`);
+  return contextResponse("PostToolUse", `Task #${taskId} completed: ${subject}\n\nChanges detected. Reminder: make a WIP commit via agent fuse-ai-pilot:commit (commit only — no push, merge or tag).`);
 }
 
 /**

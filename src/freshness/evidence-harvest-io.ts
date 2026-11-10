@@ -8,8 +8,9 @@
  * (`signTrack` → atomic write → `writeLastNonce`) — kept sync on purpose here.
  */
 import { readFileSync } from "node:fs";
+import { projectStateDir } from "../runtime/project-state-dir";
 import { harvestAgentEvidence } from "./evidence-harvest";
-import { defaultStateDir, trackFile } from "../runtime/paths";
+import { trackFile } from "../runtime/paths";
 import { emptyTrack, type SessionTrack } from "../tracking/session-state";
 import { signTrack, verifyTrack, writeLastNonce, type TrackEnvelope } from "../tracking/integrity";
 import { atomicWrite } from "../util/json-io";
@@ -40,7 +41,7 @@ function loadTrackSync(file: string): SessionTrack {
  * @param now - Fallback epoch-ms for unstamped transcript tool_uses.
  * @param baseDir - Override the track base dir (tests); defaults to the project state dir.
  */
-export function harvestSubagentTrack(payload: Record<string, unknown>, cwd: string, now: number, baseDir: string = defaultStateDir(cwd)): void {
+export function harvestSubagentTrack(payload: Record<string, unknown>, cwd: string, now: number, baseDir: string = projectStateDir(cwd)): void {
   const transcriptPath = typeof payload.agent_transcript_path === "string" ? payload.agent_transcript_path : undefined;
   if (!transcriptPath) return;
   const sessionId = typeof payload.session_id === "string" ? payload.session_id : "unknown";

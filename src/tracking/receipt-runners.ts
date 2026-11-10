@@ -20,6 +20,7 @@ import {
   parseCargoTest, parseSwiftTest, parseDartTest,
 } from "./receipt-runners-parse";
 import { parsePhpunit, parsePest } from "./receipt-runners-parse-php";
+import { parseXcodebuildTest } from "./receipt-runners-parse-xcode";
 import {
   parseMypy, parsePyright, parsePhpstan, parseTsc, parseGoStatic, parseCargoStatic, parseSwiftBuild,
 } from "./receipt-runners-parse-static";
@@ -103,6 +104,16 @@ function parseArtisanTest(output: string): { pass?: number; fail?: number } {
 }
 
 /**
+ * `xcodebuild … test` (also `test-without-building`): `test` must sit in
+ * ACTION position — after only `-flag [value]` pairs (`-scheme X`,
+ * `-destination platform=macOS`) and the `clean|build|analyze|archive`
+ * actions. `xcodebuild build`, `-showBuildSettings`, `build-for-testing` and
+ * `-only-testing:…` therefore never match. Flag tokens are `-\S+` with at most
+ * one non-dash value, so each token has a single parse (no ReDoS).
+ */
+const XCODEBUILD_TEST = "xcodebuild\\s+(?:-\\S+(?:\\s+(?!(?:clean|build|analyze|archive)\\s)[^-\\s]\\S*)?\\s+|(?:clean|build|analyze|archive)\\s+)*test\\b(?![:/])";
+
+/**
  * Recognised verification commands, first match wins. `kind: "tsc"` covers
  * every static checker (the literal is historical); `kind: "test"` covers
  * every test runner.
@@ -123,6 +134,7 @@ export const RUNNERS: readonly RunnerSpec[] = [
   { tool: "phpunit", kind: "test", cmd: anchored("phpunit\\b"), counts: parsePhpunit },
   { tool: "pest", kind: "test", cmd: anchored("pest\\b"), counts: parsePest },
   { tool: "swift test", kind: "test", cmd: anchored("swift\\s+test\\b"), counts: parseSwiftTest },
+  { tool: "xcodebuild test", kind: "test", cmd: anchored(XCODEBUILD_TEST), counts: parseXcodebuildTest },
   { tool: "dart/flutter test", kind: "test", cmd: anchored("(?:flutter|dart)\\s+test\\b"), counts: parseDartTest },
   { tool: "tsc", kind: "tsc", cmd: anchored("tsc\\b"), counts: parseTsc },
   { tool: "mypy", kind: "tsc", cmd: anchored("mypy\\b"), counts: parseMypy },

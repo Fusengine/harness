@@ -19,7 +19,7 @@ import { lessonFor } from "../../policy/lessons/lesson-gate";
 import { lessonsFileFor } from "./lessons/state";
 import { projectRoot } from "../../util/project-root";
 import { oncePerWindow } from "../inject-dedup";
-import { defaultStateDir } from "../paths";
+import { projectStateDir } from "../project-state-dir";
 import { recordFailure } from "../../tracking/one-shot-failure";
 import { logToolFailure } from "./tool-failure";
 import type { OncePerWindow } from "../../policy/lessons/types";
@@ -45,7 +45,7 @@ export function failureLessonContext(data: Record<string, unknown>, cwd: string,
   logToolFailure(data, home, now);
   const tool = typeof data.tool_name === "string" ? data.tool_name : "unknown";
   const sessionId = typeof data.session_id === "string" ? data.session_id : undefined;
-  try { recordFailure(tool, { now, dir: defaultStateDir(cwd), sessionId }); } catch { /* metric never breaks the hook */ }
+  try { recordFailure(tool, { now, dir: projectStateDir(cwd), sessionId }); } catch { /* metric never breaks the hook */ }
   const errorMsg = failureError(data);
   if (!errorMsg) return "";
   // tool="" + empty input isolates matching to the `error:` regex (rank 1),

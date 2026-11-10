@@ -4,6 +4,24 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.114] - 2026-11-10
+
+### Added
+
+- **release-gate: ask before merge/tag without fresh sniper and challenger reports** (`src/policy/release-command.ts`, `release-heredoc.ts`, `src/runtime/release-gate/gate.ts`, `pre.ts`, `store.ts`, `src/runtime/handle-pre.ts`) — release commands (merge, tag, release) are detected outside data heredocs; sniper/challenger SubagentStop reports are recorded per project, and a release command asks for confirmation when either report is missing or older than the last code edit. Tests: `release-gate`, `release-gate-command`, `release-gate-edit-time`, `release-gate-heredoc`.
+
+### Fixed
+
+- **receipts: capture Claude Code Bash receipts without `exit_code`** (`src/runtime/receipt-capture.ts`, `handle-post.ts`, `src/tracking/receipt-command.ts`) — real Claude Code `PostToolUse` Bash payloads carry no `exit_code`, so no receipt was ever captured live and the receipt gate could never be satisfied. Exit 0 is now implied only for host `claude-code` + `PostToolUse` + `interrupted === false` + not background + a single simple command + a direct runner (no npm/pnpm/yarn script launcher); counts parsed from stdout still decide pass/fail. Everything else keeps the previous behaviour (no receipt). Tests: `a1-claude-receipt`, `a1-claude-receipt-launchers`.
+- **receipts: recognise `xcodebuild test` as a verification receipt** (`src/tracking/receipt-runners.ts`, `receipt-runners-parse-xcode.ts`) — `test` matched only in xcodebuild's action position (`build`, `-showBuildSettings`, `build-for-testing` are never a test run); counts read from `Executed N tests, with M failures`; `** TEST FAILED **` floors the result to a failure. Tests: `receipt-runners-xcodebuild` (incl. ReDoS regression).
+- **gate: verification receipt gate keyed on the project dir, edit-time aware** (`src/tracking/receipts.ts`, `src/util/project-dir.ts`, `src/runtime/project-state-dir.ts`, `src/runtime/lifecycle/code-edit-time.ts`, `scratchpad-path.ts`, `track-changes.ts`, `task-completed.ts` and every state-dir call site) — `verifiedAt` derived from the run's `duration_ms`: a code file edited after the newest green run started is unverified (absent `duration_ms` keeps the TTL rule); per-file edit stamps in session changes; session scratchpad files excluded from the receipt gate only; one project-dir resolver (`CLAUDE_PROJECT_DIR` wins over cwd) for every state-dir site. Tests: `a1-project-dir`, `a1-verified-at`.
+- **apex: detect project type from the project root, drop instructions for absent tools** (`src/policy/detect-claude-md-project-type.ts`, `claude-md-context.ts`, `apex-target-steps.ts`, `apex-task-context.ts`, `detect-project.ts`, `src/runtime/lifecycle/aipilot/sync-task.ts`) — a TypeScript project maps to the `typescript` type and `typescript-expert` (dependency-key parsing of `package.json`); no more instructions for absent tools (no `TaskUpdate`, no auto-commit, no fake Task #1, no "create task.json yourself"); task completion reminds of a WIP commit via the commit agent. Tests: `apex-no-false-instructions`, `detect-claude-md-project-type`; intentionally updated: `apex-instruction-preamble` (2 assertions), `inject-context`, `inform-matrix.golden.json` (4 cells).
+- **lessons: inject the newest lessons whole, cut per whole bullet** (`src/runtime/lifecycle/aipilot/lesson-inject.ts`, `lessons/dispatch.ts`, `lessons/fit-lessons.ts`) — lessons sorted by timestamp, newest first, so the oldest are the ones compressed; injection fitted per whole bullet in the lessons path only (`capFragment` untouched). Tests: `lesson-order`; `lesson-compact` inputs re-dated to the new order, expectations unchanged.
+
+### Known
+
+- Each Bash call can produce ~27 duplicate receipts from the plugin hook fan-out; per-`tool_use_id` dedupe is parked out of this release.
+
 ## [0.1.113] - 2026-10-30
 
 ### Fixed

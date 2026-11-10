@@ -8,8 +8,9 @@
  */
 import { mergeChildEvidence } from "./child-evidence-merge";
 import { readTrackAnySync, updateTrackSync } from "./evidence-harvest-io";
-import { defaultStateDir, trackFile } from "../runtime/paths";
+import { trackFile } from "../runtime/paths";
 import { sanitizeSessionId } from "../runtime/home-state";
+import { projectStateDir } from "../runtime/project-state-dir";
 
 /**
  * Fold the finished Cursor sub-agent's track into its parent session track.
@@ -18,7 +19,7 @@ import { sanitizeSessionId } from "../runtime/home-state";
  * @param now - Event timestamp.
  * @param baseDir - Override the track base dir (tests).
  */
-export function mergeCursorChildTrack(payload: Record<string, unknown>, cwd: string, now: number, baseDir: string = defaultStateDir(cwd)): void {
+export function mergeCursorChildTrack(payload: Record<string, unknown>, cwd: string, now: number, baseDir: string = projectStateDir(cwd)): void {
   try {
     const parent = sanitizeSessionId(payload.session_id ?? payload.conversation_id);
     const child = sanitizeSessionId(payload.child_conversation_id);

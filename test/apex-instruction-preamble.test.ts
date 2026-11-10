@@ -12,10 +12,10 @@ test("buildApexInstruction: exact APEX preamble text (6 phases + honest tracking
   const agent = getExpertAgent("nextjs");
   expect(out.startsWith("INSTRUCTION: This is a development task. Use APEX methodology:")).toBe(true);
   for (const frag of [
-    "**TRACKING FILE**: [project]/.claude/apex/task.json — create it yourself via apex-methodology Step 0 (init-tracking) if missing",
+    "**TRACKING FILE**: [project]/.claude/apex/task.json — `.claude/apex/` is harness-managed and read-only for agents",
     "Project type detected: nextjs",
     `explore-codebase + research-expert + ${agent}`,
-    "2. **PLAN**: Use TaskCreate to break down tasks (<100 lines per file)",
+    "2. **PLAN**: Break the work down into tasks (<100 lines per file)",
     `3. **EXECUTE**: ${agent}, follow SOLID principles, split at 90 lines`,
     "4. **eLICIT**: self-review with NAMED elicitation techniques (apex ref 03.5-elicit) — fix findings BEFORE validation",
     "5. **VERIFY**: functional check — run it, confirm references⇔declarations consistency",
@@ -33,7 +33,7 @@ test("buildApexInstruction: codex target uses .codex + update_plan, never .claud
   const out = buildApexInstruction("nextjs", 100, "codex");
   expect(out.startsWith("INSTRUCTION: This is a development task. Use APEX methodology:")).toBe(true);
   for (const frag of [
-    "**TRACKING FILE**: [project]/.codex/apex/task.json — create it yourself via apex-methodology Step 0 (init-tracking) if missing",
+    "**TRACKING FILE**: [project]/.codex/apex/task.json — `.codex/apex/` is harness-managed and read-only for agents",
     "2. **PLAN**: Use update_plan to break down tasks (<100 lines per file)",
   ]) expect(out).toContain(frag);
   expect(out.endsWith("**IMPORTANT**: Read .codex/apex/task.json to check documentation status before writing code.")).toBe(true);

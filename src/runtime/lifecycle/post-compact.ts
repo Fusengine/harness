@@ -8,7 +8,7 @@
  */
 import { contextResponse, systemMessage } from "../../adapters/claude";
 import { oncePerWindow } from "../inject-dedup";
-import { defaultStateDir } from "../paths";
+import { projectStateDir } from "../project-state-dir";
 import { renderSnapshot } from "./snapshot";
 
 /** Re-inject at most once per 30s per session (compaction fan-out + retries). */
@@ -32,7 +32,7 @@ const REMINDER = "Context was compacted — reread files before editing (read-st
 export function postCompactContext(data: Record<string, unknown>, cwd: string, moduleUrl: string, now: number = Date.now(), id: string = "claude-code"): string {
   try {
     const sessionId = typeof data.session_id === "string" ? data.session_id : "unknown";
-    if (!oncePerWindow(`postcompact:${sessionId}`, COMPACT_DEDUP_MS, { now, dir: defaultStateDir(cwd) })) return "";
+    if (!oncePerWindow(`postcompact:${sessionId}`, COMPACT_DEDUP_MS, { now, dir: projectStateDir(cwd) })) return "";
     const snapshot = renderSnapshot(cwd, moduleUrl);
     const text = snapshot ? `${REMINDER}\n\n${snapshot}` : REMINDER;
     return id === "codex" ? systemMessage(text) : contextResponse("PostCompact", text);

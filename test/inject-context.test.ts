@@ -23,6 +23,12 @@ test("DEV_VERBS matches FR/EN dev verbs case-insensitively", () => {
 });
 
 test("detectClaudeMdProjectType: package.json next/react then generic", () => {
+  const prevDir = process.env.CLAUDE_PROJECT_DIR; // detection now follows CLAUDE_PROJECT_DIR
+  delete process.env.CLAUDE_PROJECT_DIR;
+  try { detectCases(); } finally { if (prevDir !== undefined) process.env.CLAUDE_PROJECT_DIR = prevDir; }
+});
+
+function detectCases(): void {
   const a = root();
   writeFileSync(join(a, "package.json"), JSON.stringify({ dependencies: { next: "16" } }));
   expect(detectClaudeMdProjectType(a)).toBe("nextjs");
@@ -34,7 +40,7 @@ test("detectClaudeMdProjectType: package.json next/react then generic", () => {
   writeFileSync(join(c, "artisan"), "#!/usr/bin/env php");
   expect(detectClaudeMdProjectType(c)).toBe("laravel");
   expect(detectClaudeMdProjectType(root())).toBe("generic");
-});
+}
 
 test("loadApexTaskState: parses + defaults on missing", () => {
   const dir = root();
@@ -42,7 +48,8 @@ test("loadApexTaskState: parses + defaults on missing", () => {
   const tasks = { "3": { subject: "wire", phase: "execute", doc_consulted: { ctx7: { consulted: true }, exa: { consulted: false } } } };
   writeFileSync(f, JSON.stringify({ current_task: "3", tasks }));
   expect(loadApexTaskState(f)).toEqual({ id: "3", subject: "wire", phase: "execute", docs: "ctx7" });
-  expect(loadApexTaskState(join(dir, "nope.json"))).toEqual({ id: "1", subject: "", phase: "analyze", docs: "none" });
+  // A4: no fake "Task #1" fallback — an unreadable task.json yields no state.
+  expect(loadApexTaskState(join(dir, "nope.json"))).toBeNull();
 });
 
 test("buildApexTaskContext: exact injection text", () => {
@@ -51,7 +58,8 @@ test("buildApexTaskContext: exact injection text", () => {
   expect(out).toContain("Current: Task #2 - x (Phase: plan)");
   expect(out).toContain("Docs consulted: none");
   expect(out).toContain("5. Apply SOLID (files < 100 lines)");
-  expect(out.endsWith("7. TaskUpdate(completed) → triggers auto-commit")).toBe(true);
+  // A4: no TaskUpdate/auto-commit claim (was "7. TaskUpdate(completed) → triggers auto-commit").
+  expect(out.endsWith("7. Report completion to the lead (do not commit unless the brief says so)")).toBe(true);
 });
 
 test("buildApexTaskInjection: null without .claude/apex, text with it", () => {

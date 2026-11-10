@@ -19,6 +19,7 @@ import { evaluate } from "../policy/evaluate";
 import { confirmGate } from "./confirm/confirm-gate";
 import { cursorParentSessionId } from "./confirm/cursor-subagent-link";
 import { prdPreGate } from "./prd";
+import { releasePrompt } from "./release-gate/pre";
 import type { HandleOptions, HandleOutcome } from "./handle";
 
 /** Context the PreToolUse pipeline needs (resolved once by {@link handleHook}). */
@@ -133,7 +134,8 @@ export async function handlePre(ctx: PreContext): Promise<HandleOutcome> {
     : id === "cursor" && (event.commandCandidates?.length ?? 0) > 1
       ? await gateCommandCandidates(gateInput, event.commandCandidates!)
       : await gate(gateInput);
-  if (prompt) {
+  const finalGate = prompt ?? releasePrompt(event, opts);
+  if (finalGate) {
     // CONFIRM <code> flow: ONLY changes anything when Codex/Kimi/Cursor are
     // about to downgrade THIS `ask` to a hard deny (confirmGate returns null
     // in every other case — including every claude-code call, unconditionally,
@@ -143,14 +145,14 @@ export async function handlePre(ctx: PreContext): Promise<HandleOutcome> {
     // `event.command` (candidate 0), so hashing/G4-checking the latter would
     // let a token for a benign head unlock e.g. an `rm -rf` in tool_input.
     const multiCandidate = (event.commandCandidates?.length ?? 0) > 1;
-    const confirm = confirmGate(id, prompt, multiCandidate ? undefined : event.command, event.sessionId, opts.now, opts.home,
+    const confirm = confirmGate(id, finalGate, multiCandidate ? undefined : event.command, event.sessionId, opts.now, opts.home,
       id === "codex" ? { tool: event.tool, cwd: event.cwd ?? opts.cwd, toolUseId: event.toolUseId } : undefined,
       id === "cursor" && typeof payload.generation_id === "string" && payload.generation_id ? payload.generation_id : undefined,
       id === "cursor" ? cursorParentSessionId(payload, opts.home) : undefined);
     if (confirm?.allow) {
       return allowOutcome(id, event, payload, designCacheDir, opts.cwd, { trackFile: file, windowMs: opts.windowMs, now: opts.now }, opts.corpusRoot);
     }
-    const finalPrompt = confirm ? confirm.prompt : prompt;
+    const finalPrompt = confirm ? confirm.prompt : finalGate;
     return { stdout: withDenyNotice(id, respond(id, finalPrompt, event.eventName ?? "PreToolUse"), finalPrompt, event.sessionId, dirname(file), opts.now), exit: 0 };
   }
   // Every gate allowed: hand off to the ALLOW-path assembly (pass notice +

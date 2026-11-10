@@ -94,9 +94,34 @@ function compressBullet(block: Block): string {
  * @returns The compressed block (bullets only), or the trimmed content when there are no bullets.
  */
 export function compressInjection(content: string, recentFull: number = RECENT_FULL): string {
-  const { blocks } = parse(content);
-  if (blocks.length === 0) return content.trim();
-  const full = blocks.slice(0, recentFull).map((b) => b.raw.join("\n"));
-  const rest = blocks.slice(recentFull).map(compressBullet);
-  return [...full, ...rest].join("\n");
+  const entries = lessonEntries(content, recentFull);
+  if (entries.length === 0) return content.trim();
+  return entries.map((e) => (e.recent ? e.whole : e.compact)).join("\n");
+}
+
+/** One bullet in injection order: its whole text, its one-line distillation, and whether it is among the newest. */
+export interface LessonEntry { whole: string; compact: string; recent: boolean; }
+
+/**
+ * Blocks ordered NEWEST FIRST by their `[YYYY-MM-DD HH:MM]` stamp. Real files are
+ * hybrid (newest-first head, newest appended at the end), so file order is not
+ * age order. Stable: equal stamps keep file order; blocks with no/invalid stamp
+ * sort after every dated one, in file order.
+ */
+function byNewest(blocks: Block[]): Block[] {
+  const key = (b: Block): number => (Number.isNaN(b.ts) ? Number.NEGATIVE_INFINITY : b.ts);
+  return blocks.map((b, i) => ({ b, i })).sort((x, y) => key(y.b) - key(x.b) || x.i - y.i).map((e) => e.b);
+}
+
+/**
+ * Per-bullet injection entries, newest first (see {@link byNewest}); the first
+ * `recentFull` are flagged `recent` (kept whole), the rest are compressed.
+ * @param content - Raw LESSON.md text.
+ * @param recentFull - Count of newest bullets kept whole.
+ * @returns The ordered entries (empty when the content has no bullets).
+ */
+export function lessonEntries(content: string, recentFull: number = RECENT_FULL): LessonEntry[] {
+  return byNewest(parse(content).blocks).map((b, i) => ({
+    whole: b.raw.join("\n"), compact: compressBullet(b), recent: i < recentFull,
+  }));
 }

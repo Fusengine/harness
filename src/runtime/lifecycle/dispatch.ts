@@ -22,8 +22,11 @@ import { stopCore } from "./stop-core";
 import { prdSubagentContext, prdSubagentStopGate, prdStopGate } from "../prd";
 import { joinContextResponses } from "../../policy/prd";
 import { sanitizeSessionId } from "../home-state";
-import { defaultStateDir, trackFile } from "../paths";
+import { trackFile } from "../paths";
+import { projectStateDir } from "../project-state-dir";
 import { injectStateDir, removeSessionScopes } from "../inject-session/registry";
+import { recordReviewReport } from "../release-gate/store";
+import { resolveProjectDir } from "../../util/project-dir";
 
 /** Which plugin's hooks.json invoked the harness (selects SessionStart behavior). */
 export type PluginScope = "core" | "solid" | "rules" | "carto" | "security" | "changelog" | "aipilot" | "lessons" | "seo" | "memory" | "tailwindcss" | "motion";
@@ -85,13 +88,15 @@ export function dispatchLifecycle(input: LifecycleInput): string | null {
     case "Stop": {
       if (input.scope === "lessons") return dispatchLessons("Stop", input.payload, input.cwd, input.now, input.id ?? "claude-code");
       if (input.scope !== "core") return null;
-      const prdBlock = prdStopGate(input.payload, input.cwd, input.id ?? "claude-code", trackFile(sanitizeSessionId(input.payload.session_id) ?? "unknown", defaultStateDir(input.cwd)), input.now);
+      const prdBlock = prdStopGate(input.payload, input.cwd, input.id ?? "claude-code", trackFile(sanitizeSessionId(input.payload.session_id) ?? "unknown", projectStateDir(input.cwd)), input.now);
       return prdBlock || stopCore(input.payload, input.cwd, input.now, input.id ?? "claude-code");
     }
     case "SubagentStop": {
       // G0 counterpart of the SubagentStart branch above — the SAME
       // monotone max-write, never a decrement (see confirm-subagent.ts). Not on Cursor (see above).
       if (input.id !== "cursor") markSubagentSeen(input.payload.session_id, input.now);
+      // Release gate: timestamp sniper/challenger reports (idempotent across the multi-plugin fan-out, never throws).
+      recordReviewReport(input.payload, resolveProjectDir(input.cwd), input.now);
       if (input.scope === "aipilot") return "";
       // Retroactively harvest the finishing sub-agent's transcript into the session
       // track BEFORE the reminder — so next turn's freshness gate sees research/
@@ -104,7 +109,7 @@ export function dispatchLifecycle(input: LifecycleInput): string | null {
       // -> normal trackAgentMemory handling; a non-null string (block, or ""
       // on an already-blocked replay) must be returned AS-IS, never layered
       // under a stale "agent completed" message.
-      const prdBlock = prdSubagentStopGate(input.payload, input.cwd, input.id ?? "claude-code", trackFile(sanitizeSessionId(input.payload.session_id) ?? "unknown", defaultStateDir(input.cwd)), input.now);
+      const prdBlock = prdSubagentStopGate(input.payload, input.cwd, input.id ?? "claude-code", trackFile(sanitizeSessionId(input.payload.session_id) ?? "unknown", projectStateDir(input.cwd)), input.now);
       return prdBlock !== null ? prdBlock : trackAgentMemory(input.payload, undefined, input.now, input.id ?? "claude-code");
     }
     case "TeammateIdle":

@@ -24,7 +24,7 @@ import { budgetReport } from "./inject-budget";
 import { fragmentRegistry } from "./fragment-registry";
 import { onceExclusive } from "./inject-dedup";
 import { BURST_DEDUP_MS } from "./burst-window";
-import { defaultStateDir } from "./paths";
+import { projectStateDir } from "./project-state-dir";
 
 /**
  * Attach the aggregated recap onto `stdout` when 2+ fragments were recorded
@@ -42,6 +42,6 @@ export function attachBudgetRecap(stdout: string, rawEvent: string, sessionId: s
   if (rawEvent !== "SessionStart" && rawEvent !== "SubagentStart") return stdout;
   const fragments = fragmentRegistry();
   if (fragments.length <= 1) return stdout;
-  if (!onceExclusive(`budget:${sessionId}:${rawEvent}`, BURST_DEDUP_MS, { now, dir: defaultStateDir(cwd) })) return stdout;
+  if (!onceExclusive(`budget:${sessionId}:${rawEvent}`, BURST_DEDUP_MS, { now, dir: projectStateDir(cwd) })) return stdout;
   return attachSystemMessage(stdout, budgetReport(fragments));
 }

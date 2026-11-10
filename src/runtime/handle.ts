@@ -5,8 +5,9 @@ import { detectCreationIntent } from "../policy/creation-intent";
 import { recordBrainstormRequired } from "../tracking/session-state";
 import { withTrack } from "../tracking/store";
 import { normalizeEvent } from "./normalize";
-import { defaultStateDir, projectHash, trackFile } from "./paths";
+import { projectHash, trackFile } from "./paths";
 import { fuseHarnessHome } from "./home-state";
+import { projectStateDir } from "./project-state-dir";
 import { designLifecycle } from "./design-lifecycle";
 import { promptSubmitContext } from "./inject-context";
 import { lifecycleStdout } from "./lifecycle-bridge";
@@ -64,7 +65,7 @@ async function handleHookCore(id: string, payload: Record<string, unknown>, opts
   // reset here can never mix fragments across unrelated events.
   resetFragmentRegistry();
   const layout = projectLayout(opts.cwd);
-  const file = trackFile(event.sessionId, defaultStateDir(opts.cwd));
+  const file = trackFile(event.sessionId, projectStateDir(opts.cwd));
   const mcpDir = layout.cacheDir;
   // Design pipeline (flag + `.design-state-*.json`) is anchored on the session
   // id, not `mcpDir`/cwd — see design-cache-resolve.ts. `mcpDir` itself stays

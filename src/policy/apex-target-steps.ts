@@ -11,6 +11,7 @@
  * async background tasks and must never be used here.
  */
 import type { HarnessId } from "../detect/interfaces/types";
+import { apexPlanTool } from "./apex-target";
 import type { ApexTaskSteps, ApexAgentSteps } from "./interfaces/types";
 
 /** Codex/Kimi step-trio overrides; any other target falls back to {@link DEFAULT_TASK_STEPS}. */
@@ -29,9 +30,9 @@ const TASK_STEPS: Partial<Record<HarnessId, ApexTaskSteps>> = {
 
 /** Default (Claude Code) step trio — zero-regression fallback for any unlisted target. */
 const DEFAULT_TASK_STEPS: ApexTaskSteps = {
-  step3: "TaskList → see pending tasks",
-  step4: "TaskUpdate(in_progress) → before starting",
-  step7: "TaskUpdate(completed) → triggers auto-commit",
+  step3: "Review pending tasks in task.json (read-only, harness-managed)",
+  step4: "Start only the task you were assigned",
+  step7: "Report completion to the lead (do not commit unless the brief says so)",
 };
 
 /**
@@ -58,9 +59,20 @@ const AGENT_STEPS: Partial<Record<HarnessId, ApexAgentSteps>> = {
 
 /** Default (Claude Code) before/done pair — zero-regression fallback for any unlisted target. */
 const DEFAULT_AGENT_STEPS: ApexAgentSteps = {
-  beforeStart: "Use TaskUpdate(taskId, status: in_progress) before starting",
-  whenDone: "TaskUpdate(taskId, status: completed) triggers auto-commit",
+  beforeStart: "Start only the task you were assigned; task state in the apex dir is harness-managed (read-only)",
+  whenDone: "Report completion to the lead; do not commit unless the brief says so",
 };
+
+/**
+ * PLAN-step phrasing for a harness target. Codex/Kimi have a real native plan
+ * tool; any other target gets a tool-neutral phrase (a Claude `TaskCreate` may
+ * be deferred or absent, so it is never instructed).
+ * @param id - Harness id.
+ * @returns The imperative phrase, without the line-limit suffix.
+ */
+export function apexPlanPhrase(id: string): string {
+  return id in TASK_STEPS ? `Use ${apexPlanTool(id)} to break down tasks` : "Break the work down into tasks";
+}
 
 /**
  * Resolve the beforeStart/whenDone phrasing for a harness target (APEX
