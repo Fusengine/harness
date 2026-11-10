@@ -3,9 +3,10 @@
  * Ports `track-enrichment.py`: persists manual descriptions to a sidecar so the
  * next regeneration can preserve them.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseEnrichment } from "../../../policy/cartographer/entry";
+import { readSmallRegularFile } from "./bounded-read";
+import { writeFileReplacing } from "./safe-write";
 
 /** Shape of the `.enriched.json` sidecar. */
 interface EnrichedSidecar {
@@ -20,26 +21,22 @@ interface EnrichedSidecar {
  */
 export function trackEnrichment(filePath: string): void {
   if (!filePath || !filePath.includes(".cartographer") || !filePath.endsWith("index.md")) return;
-  if (!existsSync(filePath)) return;
+  const text = readSmallRegularFile(filePath);
+  if (text === undefined) return;
   const sidecar = join(dirname(filePath), ".enriched.json");
   let existing: EnrichedSidecar = { version: 1, entries: {} };
-  if (existsSync(sidecar)) {
+  const rawSidecar = readSmallRegularFile(sidecar);
+  if (rawSidecar !== undefined) {
     try {
-      existing = JSON.parse(readFileSync(sidecar, "utf-8")) as EnrichedSidecar;
+      existing = JSON.parse(rawSidecar) as EnrichedSidecar;
     } catch { /* keep default */ }
   }
   const entries = (existing.entries ??= {});
-  let text = "";
-  try {
-    text = readFileSync(filePath, "utf-8");
-  } catch {
-    return;
-  }
   for (const line of text.split("\n")) {
     const e = parseEnrichment(line);
     if (e) entries[e[0]] = e[1];
   }
   try {
-    writeFileSync(sidecar, JSON.stringify(existing, null, 2) + "\n", "utf-8");
+    writeFileReplacing(sidecar, JSON.stringify(existing, null, 2) + "\n");
   } catch { /* best effort */ }
 }
