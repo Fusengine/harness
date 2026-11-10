@@ -2,6 +2,7 @@ import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
 import { hasSafeWriteTarget, isSafeCommandTarget, isSafeWritePath } from "./bash-write-safe-paths";
 import { shellFileWriteRedirects } from "./bash-write-redirects";
+import { redirectsOnlyInScratchpad } from "./bash-write-scratchpad";
 import { unquotedShellText } from "./bash-write-unquoted";
 import {
   ASK_WRITERS, CODE_COMMAND_WRITE, CODE_FILE_LITERAL, CODE_MUTATORS, INLINE_JS_ANCHOR, INLINE_JS_STDIN_ANCHOR,
@@ -119,9 +120,15 @@ export function bashWriteGuard(ctx: GuardContext): Prompt | null {
 
   if (redirects.length > 0) {
     if (isSafeWritePath(cmd)) return null;
-    return redirects.some((redirect) => CODE_FILE_LITERAL.test(redirect.target))
-      ? blockCodeWrite("Bash redirect to code file — Use Write/Edit tools (enforces APEX + SOLID specs)")
-      : askFileWrite("Shell redirect to file detected. Authorize?", "bash-write:file-redirect");
+    if (redirects.some((redirect) => CODE_FILE_LITERAL.test(redirect.target))) {
+      return blockCodeWrite("Bash redirect to code file — Use Write/Edit tools (enforces APEX + SOLID specs)");
+    }
+    // Narrow window: every redirect provably lands in the session scratchpad → no ask here; the later
+    // stages (inline node/ruby, ASK_WRITERS) still run, so the command is never more permissive than
+    // the same command without its redirects.
+    if (!redirectsOnlyInScratchpad(cmd, ctx.scratchpadDir)) {
+      return askFileWrite("Shell redirect to file detected. Authorize?", "bash-write:file-redirect");
+    }
   }
 
   // Unanchored ask-tier fallback (restored verbatim from main, Break 3 fix,
