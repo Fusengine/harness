@@ -70,12 +70,12 @@ test("frozen hint: a Cursor deny during the sub-agent freeze says until when; Ki
   markSubagentSeen(s, NOW - 1000, h);
   const cursor = confirmGate("cursor", ASK, CMD, s, NOW, h, undefined, "gen-F");
   expect(cursor?.allow).toBe(false);
-  expect(cursor && !cursor.allow ? cursor.prompt.reason : "").toContain("Confirmation gelée (sous-agent actif) jusqu'à");
+  expect(cursor && !cursor.allow ? cursor.prompt.reason : "").toContain("Confirmation frozen (sub-agent active) until");
   const kimi = confirmGate("kimi", ASK, CMD, s, NOW, h);
-  expect(kimi && !kimi.allow ? kimi.prompt.reason : "").not.toContain("gelée");
+  expect(kimi && !kimi.allow ? kimi.prompt.reason : "").not.toContain("frozen");
   // No sub-agent seen → no hint.
   const quiet = confirmGate("cursor", ASK, CMD, sid(), NOW, h, undefined, "gen-F");
-  expect(quiet && !quiet.allow ? quiet.prompt.reason : "").not.toContain("gelée");
+  expect(quiet && !quiet.allow ? quiet.prompt.reason : "").not.toContain("frozen");
 });
 
 test("end to end (real CLI, isolated HOME): CONFIRM then preToolUse + beforeShellExecution of the same command both pass; the next turn is denied", () => {

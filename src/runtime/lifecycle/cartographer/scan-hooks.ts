@@ -4,9 +4,13 @@
  * row. The `hooks` value (or the whole document) is either a MAP of event →
  * entries (keys are the events) or a LIST of entries each carrying an `event`.
  */
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ScanRow } from "../../../policy/cartographer/build-tree";
+import { capPluginString, readSmallRegularFile } from "./bounded-read";
+import { isRealDir } from "./safe-write";
+
+/** Max distinct hook events kept per plugin. */
+const MAX_EVENTS = 100;
 
 /** True for a non-null plain object (excludes arrays), mirroring Python `isinstance(x, dict)`. */
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -15,7 +19,8 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 /** Sort unique non-empty strings alpha (byte-order). */
 function sortedEvents(events: Iterable<string>): string[] {
-  return [...new Set([...events].filter((e) => e))].sort((a, b) => a.localeCompare(b, "en"));
+  const capped = [...events].filter((e) => e).map(capPluginString);
+  return [...new Set(capped)].sort((a, b) => a.localeCompare(b, "en")).slice(0, MAX_EVENTS);
 }
 
 /** Derive hook event names from the `hooks.json` data (map keys, or list `event` fields). */
@@ -36,9 +41,11 @@ function hookEvents(hooksData: unknown): string[] {
  */
 export function scanHooks(root: string): ScanRow[] {
   const file = join(root, "hooks", "hooks.json");
-  if (!existsSync(file)) return [];
+  if (!isRealDir(join(root, "hooks"))) return [];
+  const text = readSmallRegularFile(file);
+  if (text === undefined) return [];
   try {
-    const raw: unknown = JSON.parse(readFileSync(file, "utf-8"));
+    const raw: unknown = JSON.parse(text);
     const hooksData = isPlainObject(raw) ? (raw.hooks ?? raw) : {};
     const events = hookEvents(hooksData);
     return events.length ? [["hooks", events.join(", "), ""]] : [];

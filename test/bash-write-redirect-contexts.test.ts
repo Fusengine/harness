@@ -3,8 +3,9 @@ import { bashWriteGuard } from "../src/policy/guards/bash-write";
 
 const verdict = (command: string): string => bashWriteGuard({ tool: "Bash", command })?.kind ?? "allow";
 
-test("preserves legacy &> handling", () => {
-  expect(verdict("echo x &> out.txt")).toBe("allow");
+// Was pinned to "allow" (the bug: `&>` slipped past the guard while `>` asks). See bash-write-amp-redirect.test.ts.
+test("&> is a file write like >", () => {
+  expect(verdict("echo x &> out.txt")).toBe("ask");
 });
 
 test("detects Bash noclobber override >|", () => {

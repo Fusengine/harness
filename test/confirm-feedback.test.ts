@@ -37,7 +37,7 @@ test("kimi: an accepted CONFIRM gets a visible acknowledgement naming the comman
   const deny = await handleHook("kimi", pre("kimi", s, cmd), opts);
   const code = codeFromDeny(deny.stdout);
   const out = await handleHook("kimi", submit(s, `CONFIRM ${code}`), { ...opts, now: 1100 });
-  expect(out.stdout).toContain(`[fuse-harness] CONFIRM ${code} accepté pour : ${cmd} (valable 5 min)`);
+  expect(out.stdout).toContain(`[fuse-harness] CONFIRM ${code} accepted for: ${cmd} (valid 5 min)`);
 });
 
 test("kimi: an unknown code lists the pending codes with truncated commands", async () => {
@@ -49,18 +49,18 @@ test("kimi: an unknown code lists the pending codes with truncated commands", as
   const code = codeFromDeny(deny.stdout);
   const wrong = code === "dead" ? "beef" : "dead";
   const out = await handleHook("kimi", submit(s, `CONFIRM ${wrong}`), { ...opts, now: 1100 });
-  expect(out.stdout).toContain(`[fuse-harness] CONFIRM ${wrong} inconnu —`);
-  expect(out.stdout).not.toContain("ou expiré"); // pendings never expire
-  expect(out.stdout).toContain("codes en attente :");
+  expect(out.stdout).toContain(`[fuse-harness] CONFIRM ${wrong} unknown —`);
+  expect(out.stdout).not.toContain("or expired"); // pendings never expire
+  expect(out.stdout).toContain("pending codes:");
   expect(out.stdout).toContain(`${code} (${cmd})`);
 });
 
 test("kimi: unknown code with nothing pending says so", async () => {
   const opts: HandleOptions = { now: 1000, cwd: cwd(), home: home() };
   const out = await handleHook("kimi", submit(sid("fb-kimi-none"), "CONFIRM dead"), opts);
-  expect(out.stdout).toContain("[fuse-harness] CONFIRM dead inconnu —");
-  expect(out.stdout).not.toContain("ou expiré");
-  expect(out.stdout).toContain("codes en attente : aucun");
+  expect(out.stdout).toContain("[fuse-harness] CONFIRM dead unknown —");
+  expect(out.stdout).not.toContain("or expired");
+  expect(out.stdout).toContain("pending codes: none");
 });
 
 test("codex: an accepted CONFIRM rides the additionalContext envelope", async () => {
@@ -74,10 +74,10 @@ test("codex: an accepted CONFIRM rides the additionalContext envelope", async ()
   const out = await handleHook("codex", submit(s, `CONFIRM ${code}`), { ...opts, now: 1100 });
   const j = JSON.parse(out.stdout) as { hookSpecificOutput?: { hookEventName?: string; additionalContext?: string } };
   expect(j.hookSpecificOutput?.hookEventName).toBe("UserPromptSubmit");
-  expect(j.hookSpecificOutput?.additionalContext).toContain(`[fuse-harness] CONFIRM ${code} accepté — relance maintenant exactement : ${cmd} (valide 5 min)`);
+  expect(j.hookSpecificOutput?.additionalContext).toContain(`[fuse-harness] CONFIRM ${code} accepted — rerun now exactly: ${cmd} (valid 5 min)`);
 });
 
-test("codex: an unknown code answers 'inconnu' instead of staying silent", async () => {
+test("codex: an unknown code answers 'unknown' instead of staying silent", async () => {
   const h = home();
   const workdir = cwd();
   const opts: HandleOptions = { now: 1000, cwd: workdir, home: h };
@@ -91,11 +91,11 @@ test("codex: an unknown code answers 'inconnu' instead of staying silent", async
   // The incident's step 3: the FIRST code typed after the second denial.
   const out = await handleHook("codex", submit(s, `CONFIRM ${codeA}`), { ...opts, now: 1020 });
   // Post-fix A is still pending, so this is an ACCEPT; the stale case is covered by kimi above.
-  expect(out.stdout).toContain(`[fuse-harness] CONFIRM ${codeA} accepté`);
+  expect(out.stdout).toContain(`[fuse-harness] CONFIRM ${codeA} accepted`);
   const wrong = codeB === "dead" ? "beef" : "dead";
   const unknown = await handleHook("codex", submit(s, `CONFIRM ${wrong}`), { ...opts, now: 1030 });
-  expect(unknown.stdout).toContain(`[fuse-harness] CONFIRM ${wrong} inconnu —`);
-  expect(unknown.stdout).not.toContain("ou expiré");
+  expect(unknown.stdout).toContain(`[fuse-harness] CONFIRM ${wrong} unknown —`);
+  expect(unknown.stdout).not.toContain("or expired");
   expect(unknown.stdout).toContain(codeB);
 });
 

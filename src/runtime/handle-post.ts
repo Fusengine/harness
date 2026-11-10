@@ -16,6 +16,8 @@ import { fanOutFiles, firstFileMatch } from "./post-fanout";
 import { postOutcome } from "./post-outcome";
 import { rawEventName } from "./handle-payload";
 import { prdPostCheck } from "./prd";
+import { isAgentTool } from "./is-agent-tool";
+import { recoveredReportContext } from "./lifecycle/report-recovery";
 import type { PreContext } from "./handle-pre";
 import type { HandleOutcome } from "./handle";
 
@@ -95,9 +97,11 @@ export async function handlePost(ctx: PreContext): Promise<HandleOutcome> {
   }
   let extra = "";
   for (const f of files) {
-    extra = await postEditContext(opts.scope ?? "core", f, opts.now, id);
+    extra = await postEditContext(opts.scope ?? "core", f, opts.now, id, opts.cwd);
     if (extra) break;
   }
+  // Report recovery (Claude Code, core scope only — one emitter, not the ~11-plugin fan-out): context only, the Agent tool output is never touched.
+  if (!extra && id === "claude-code" && opts.scope === "core" && isAgentTool(event.tool) && rawEventName(payload) === "PostToolUse") extra = recoveredReportContext(payload);
   return postOutcome({
     id, agentId: typeof payload.agent_id === "string" ? payload.agent_id : "", sessionId: event.sessionId,
     now: opts.now, cwd: opts.cwd, activities, files,

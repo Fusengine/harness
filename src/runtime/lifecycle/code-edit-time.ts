@@ -7,6 +7,10 @@ export interface SessionChanges {
   modifiedFiles?: string[];
   /** Last CODE edit time (epoch ms) per file path, stamped by `trackSessionChanges`. */
   editedAt?: Record<string, number>;
+  /** Files each sub-agent wrote, keyed by the PostToolUse `agent_id` (per-agent attribution at SubagentStop). */
+  agentFiles?: Record<string, string[]>;
+  /** `<agent_id>\0<file>` → epoch ms of the last sniper demand: a file is demanded once PER AGENT until it is edited again (replaces masking through the shared counter). */
+  remindedAt?: Record<string, number>;
   lastModifiedFile?: string;
   lastCheck?: string;
 }

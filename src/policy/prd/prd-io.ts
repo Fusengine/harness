@@ -7,8 +7,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { readJsonFile, writeJsonFile } from "../../util/json-io";
 import { prdAgentReportPath, prdRouterPath, prdTaskPath } from "./prd-paths";
-import { parseAgentReportFile, parseRouter, parseTaskFile } from "./prd-schema";
-import type { PrdAgentReportFile, PrdRouter, PrdTaskFile } from "./interfaces/types";
+import { parseAgentReportFile, parseTaskFile } from "./prd-schema";
+import { classifyRouterText } from "./prd-router-state";
+import type { PrdAgentReportFile, PrdRouter, PrdRouterSnapshot, PrdRouterState, PrdTaskFile } from "./interfaces/types";
 
 function readJsonSync(path: string): unknown {
   try {
@@ -19,16 +20,33 @@ function readJsonSync(path: string): unknown {
   }
 }
 
-/** Reads the router file; `null` when missing or malformed. */
+/** One read of the router file -> raw text + {@link PrdRouterState}; an unreadable file (e.g. a directory) is a `syntax` state, never `absent`. */
+export function readRouterSnapshotSync(root: string, homeSeg: string): PrdRouterSnapshot {
+  const path = prdRouterPath(root, homeSeg);
+  if (!existsSync(path)) return { text: null, state: { state: "absent" } };
+  try {
+    const text = readFileSync(path, "utf8");
+    return { text, state: classifyRouterText(text) };
+  } catch (err) {
+    return { text: null, state: { state: "syntax", error: `cannot read file (${err instanceof Error ? err.message : String(err)})` } };
+  }
+}
+
+/** Reads the router file's {@link PrdRouterState} (absent / syntax / schema / ok). */
+export async function readRouterState(root: string, homeSeg: string): Promise<PrdRouterState> {
+  return readRouterSnapshotSync(root, homeSeg).state;
+}
+
+/** Reads the router file; `null` when missing or malformed (any non-ok state). */
 export async function readRouter(root: string, homeSeg: string): Promise<PrdRouter | null> {
-  const raw = await readJsonFile<unknown>(prdRouterPath(root, homeSeg));
-  return raw === null ? null : parseRouter(raw);
+  const state = await readRouterState(root, homeSeg);
+  return state.state === "ok" ? state.router : null;
 }
 
 /** Sync twin of {@link readRouter}, for SubagentStart/Stop call sites. */
 export function readRouterSync(root: string, homeSeg: string): PrdRouter | null {
-  const raw = readJsonSync(prdRouterPath(root, homeSeg));
-  return raw === null ? null : parseRouter(raw);
+  const { state } = readRouterSnapshotSync(root, homeSeg);
+  return state.state === "ok" ? state.router : null;
 }
 
 /** Reads a task-PRD file; `null` when missing or malformed. */

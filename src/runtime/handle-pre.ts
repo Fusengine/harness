@@ -114,6 +114,7 @@ export async function handlePre(ctx: PreContext): Promise<HandleOutcome> {
     filePath: event.filePath,
     content: event.content,
     command: event.command,
+    scratchpadDir: event.scratchpadDir,
     cwd: opts.cwd,
     loadRefs: await lazyRefs(opts.refsDir), // same throw point + error as the former eager load; real scan deferred to the consumer
     isReplaceAll: event.input.replace_all === true,

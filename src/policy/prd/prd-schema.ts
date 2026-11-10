@@ -7,7 +7,8 @@ import type {
   PrdSubTask, PrdTaskAgentEntry, PrdTaskFile,
 } from "./interfaces/types";
 
-const ROUTER_STATUSES: readonly PrdRouterStatus[] = ["assigned", "in-progress", "validated"];
+/** The router statuses the schema accepts (also used to word schema diagnostics). */
+export const ROUTER_STATUSES: readonly PrdRouterStatus[] = ["assigned", "in-progress", "validated"];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

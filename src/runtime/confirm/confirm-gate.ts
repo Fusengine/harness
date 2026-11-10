@@ -31,7 +31,7 @@ const CURSOR_SIBLING_GRACE_MS = 10_000;
  */
 function frozenHint(sessionId: string, now: number, home?: string): string {
   const until = subagentFrozenUntil(sessionId, now, home);
-  return until === null ? "" : `\nConfirmation gelée (sous-agent actif) jusqu'à ${new Date(until).toLocaleTimeString("fr-FR")} — renvoie le code après.`;
+  return until === null ? "" : `\nConfirmation frozen (sub-agent active) until ${new Date(until).toLocaleTimeString("en-GB")} — send the code again afterwards.`;
 }
 
 /**
@@ -72,7 +72,7 @@ export function confirmGate(
       if (verdict.allow) return verdict;
       const ruleId = prompt.ruleId ?? "policy:ask";
       const diagnostic = `rule ID: ${ruleId}\ncanonical command: ${action.command}\nexpected token: CONFIRM ${action.code}\nrejection: ${verdict.reason}`;
-      return { allow: false, prompt: { ...prompt, reason: `${prompt.reason}\nPour autoriser, réponds : CONFIRM ${action.code}\n${diagnostic}` } };
+      return { allow: false, prompt: { ...prompt, reason: `${prompt.reason}\nTo allow, reply: CONFIRM ${action.code}\n${diagnostic}` } };
     }
     const hash = hashForAction(command);
     // Cursor runs this twice per Shell command (preToolUse + beforeShellExecution): let the sibling pass of the same turn reuse the token.
@@ -85,8 +85,8 @@ export function confirmGate(
     recordPendingDeny(sessionId, hash, code, command, now, home);
     if (parent) recordPendingDeny(parent, hash, code, command, now, home);
     // A sub-agent's code is confirmed in the parent chat: show the exact command so the human sees what they approve.
-    const shown = parent ? `\ncommande (sous-agent) : ${command}` : "";
-    return { allow: false, prompt: { ...prompt, reason: `${prompt.reason}\nPour autoriser, réponds : CONFIRM ${code}${shown}${id === "cursor" ? frozenHint(parent ?? sessionId, now, home) : ""}` } };
+    const shown = parent ? `\ncommand (sub-agent): ${command}` : "";
+    return { allow: false, prompt: { ...prompt, reason: `${prompt.reason}\nTo allow, reply: CONFIRM ${code}${shown}${id === "cursor" ? frozenHint(parent ?? sessionId, now, home) : ""}` } };
   } catch {
     // A state-io failure (full disk, unwritable home) must fall back to the
     // plain deny, never crash the hook — same invariant as confirm-submit.ts.

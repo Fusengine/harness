@@ -10,7 +10,7 @@ import { trackFile } from "../paths";
 import { freshReceiptFromFile, verifiedAtFromFile } from "../../tracking/receipts";
 import { projectStateDir } from "../project-state-dir";
 import type { SessionChanges } from "./code-edit-time";
-import { isClaudeScratchpad } from "./scratchpad-path";
+import { projectCodeFiles } from "./project-code";
 import { receiptHint } from "./receipt-hint";
 import { CODE_EXTENSIONS } from "./code-extensions";
 import { stopNoticeOnce, stopReceiptDue, stopSolidMessage, stopSolidResponse } from "./stop-notice";
@@ -20,11 +20,6 @@ const RECEIPT_TTL_MULTIPLIER = 5;
 
 /** Files modified during the session, persisted by {@link trackSessionChanges}. */
 type Changes = SessionChanges;
-
-/** The modified files that are code (by extension) — the receipt gate's trigger set. Session-scratchpad probes (throwaway, real Claude Code path only) never trigger it. */
-function codeFiles(files: string[]): string[] {
-  return files.filter((fp) => CODE_EXTENSIONS.has(extname(fp)) && !isClaudeScratchpad(fp));
-}
 
 /**
  * Refuse completion when code files changed but no fresh, passing verification
@@ -36,7 +31,7 @@ function codeFiles(files: string[]): string[] {
  * shown to the user. Returns that JSON, or `null` when the session is clear.
  */
 function receiptGate(sid: string, files: string[], editedAt: Record<string, number>, now: number, stateDir: string, cwd: string): string | null {
-  const code = codeFiles(files);
+  const code = files; // already narrowed to real project code by validateTaskSolid
   if (code.length === 0) return null;
   const windowMs = resolveTtlSec(process.env) * 1000 * RECEIPT_TTL_MULTIPLIER;
   const track = trackFile(sid, stateDir);
@@ -90,7 +85,8 @@ export function validateTaskSolid(payload: Record<string, unknown>, home: string
   const sid = sanitizeSessionId(payload.session_id ?? "unknown");
   if (!sid) return "";
   const changes = loadSessionState(sid, home).changes as Changes | undefined;
-  const files = changes?.modifiedFiles ?? [];
+  // Real project code only (never session-scratchpad / $TMPDIR / out-of-root probes) — every check below judges this list.
+  const files = projectCodeFiles(changes?.modifiedFiles ?? [], typeof payload.cwd === "string" ? payload.cwd : undefined);
   const editedAt = changes?.editedAt ?? {};
   if (files.length === 0) return "";
   const max = resolveMaxLines();
@@ -104,7 +100,7 @@ export function validateTaskSolid(payload: Record<string, unknown>, home: string
       return verdict && stopReceiptDue(sid, stateDir, now) ? verdict : "";
     }
     const msg = stopSolidMessage(violations, max);
-    if (!stopNoticeOnce(sid, `${msg}\n${codeFiles(files).join("\n")}`, stateDir, now)) return "";
+    if (!stopNoticeOnce(sid, `${msg}\n${files.join("\n")}`, stateDir, now)) return "";
     return stopSolidResponse(id, msg);
   }
   if (violations.length === 0) return receiptGate(sid, files, editedAt, now, stateDir, cwd) ?? "";

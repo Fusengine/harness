@@ -7,14 +7,11 @@ import { loadSessionState, sanitizeSessionId, saveSessionState, sessionsDir } fr
 import { trackFile } from "../paths";
 import { projectStateDir } from "../project-state-dir";
 import { freshReceiptFromFile } from "../../tracking/receipts";
-import { attributeFiles, filesWrittenByAgent } from "./agent-files";
+import { attributeFiles, filesWrittenByAgent, isAgentKey, taggedFilesOf } from "./agent-files";
+import type { SessionChanges } from "./code-edit-time";
+import { projectCodeFiles } from "./project-code";
+import { clearGuardRecord, recordGuardEmission } from "./report-recovery";
 import { receiptHint } from "./receipt-hint";
-
-/** The `changes` block written by `track-changes.ts` into unified session state. */
-interface Changes {
-  cumulativeCodeFiles?: number;
-  modifiedFiles?: string[];
-}
 
 /** `~/.claude/memory/agents` — agent completion history dir. */
 function memoryDir(home: string): string {
@@ -72,36 +69,56 @@ export function trackAgentMemory(data: Record<string, unknown>, home: string = h
   recordHistory(home, String(data.agent_id ?? "unknown"), agentType, ts);
   if (SKIP_AGENTS.test(agentType)) return completedOutput(id, `Agent ${agentType} completed`);
   const state = loadSessionState(sessionId, home);
-  const changes = state.changes as Changes | undefined;
-  const count = changes?.cumulativeCodeFiles ?? 0;
-  if (count > 0) {
-    // Attribute only the files THIS agent actually wrote, parsed from its own
-    // transcript (SubagentStop `agent_transcript_path`, CLI v2.0.42+). When the
-    // field is absent or the transcript is unreadable, `filesWrittenByAgent`
-    // returns null → fall back to the session-wide list (no regression).
-    const written = filesWrittenByAgent(typeof data.agent_transcript_path === "string" ? data.agent_transcript_path : undefined);
-    const owned = written === null ? (changes?.modifiedFiles ?? []) : attributeFiles(changes?.modifiedFiles ?? [], written);
-    // Only reset the session counter when this agent owns changes — so an agent
-    // that touched none of the tracked files never clears them for the real
-    // author, and never gets told to validate another teammate's work.
-    if (owned.length > 0) {
-      saveSessionState(sessionId, { ...state, changes: { ...changes, cumulativeCodeFiles: 0 } }, home);
-      // Never demand sniper on a file the agent deleted before stopping (e.g. a
-      // scratch probe rm -rf'd): the tracked list records writes, never removals,
-      // so re-check the disk (a relative path resolves against the hook cwd) and
-      // keep only files still present. All gone → nothing to validate → "no changes".
-      const hookCwd = typeof data.cwd === "string" ? data.cwd : process.cwd();
-      const present = owned.filter((f) => existsSync(resolve(hookCwd, f)));
-      if (present.length > 0) {
-        // Advisory (no hard block here — the TaskCompleted gate enforces): flag the
-        // missing proof when the agent owns code but posted no fresh passing receipt.
-        // Window = TTL×5, matching the TaskCompleted receipt gate.
-        const windowMs = resolveTtlSec(process.env) * 1000 * 5;
-        const noReceipt = freshReceiptFromFile(trackFile(sessionId, projectStateDir(process.cwd())), windowMs, now) === null;
-        const note = noReceipt ? ` NO VERIFICATION RECEIPT — ${shortReceiptHint(hookCwd, present)}` : "";
-        return reminderOutput(id, `SNIPER VALIDATION REQUIRED: Agent '${agentType}' modified ${present.length} code file(s): ${present.join(", ")}. Run sniper agent now.${note}`);
-      }
+  const changes = state.changes as SessionChanges | undefined;
+  // Real project code only: never session-scratchpad / $TMPDIR / out-of-root probes.
+  const hookCwd = typeof data.cwd === "string" ? data.cwd : process.cwd();
+  const tracked = projectCodeFiles(changes?.modifiedFiles ?? [], typeof data.cwd === "string" ? data.cwd : undefined);
+  // Attribution: the files THIS agent wrote = its own transcript Writes (SubagentStop
+  // `agent_transcript_path`, CLI v2.0.42+) ∪ the files its PostToolUse hooks tagged with its
+  // `agent_id`. Neither available → null → session-wide list (conservative: keeps biting).
+  const written = filesWrittenByAgent(typeof data.agent_transcript_path === "string" ? data.agent_transcript_path : undefined);
+  const tagged = taggedFilesOf(changes, data.agent_id);
+  const attributed = written === null && tagged === null ? null : [...(written ?? []), ...(tagged ?? [])];
+  // Dedupe key: the agent id, else its own transcript path; neither → no dedupe (keeps biting).
+  const agentKey = isAgentKey(data.agent_id) ? data.agent_id : typeof data.agent_transcript_path === "string" ? data.agent_transcript_path : "";
+  let fresh: string[];
+  if (attributed === null) {
+    // Legacy session-wide fallback: gated by the shared counter, which the first owner zeroes.
+    fresh = (changes?.cumulativeCodeFiles ?? 0) > 0 ? tracked : [];
+  } else {
+    // Per-agent judgement: each agent is held for ITS files whatever another agent already
+    // zeroed on the shared counter; a file is demanded once PER AGENT (`remindedAt`,
+    // keyed `<agent_id>\0<file>`), so a second author of the same file is still held for it.
+    // A file edited AFTER the previous demand (`editedAt` > `remindedAt`) is demanded again.
+    const reminded = changes?.remindedAt ?? {};
+    fresh = attributeFiles(tracked, attributed).filter((f) => {
+      const at = Object.hasOwn(reminded, `${agentKey}\0${f}`) ? reminded[`${agentKey}\0${f}`] : undefined;
+      return agentKey === "" || at === undefined || (changes?.editedAt?.[f] ?? -Infinity) > at;
+    });
+  }
+  // Only reset when this agent owns changes — an agent that touched none of the tracked
+  // files never clears them for the real author, nor is told to validate a teammate's work.
+  if (fresh.length > 0) {
+    const remindedAt = { ...(changes?.remindedAt ?? {}), ...Object.fromEntries(fresh.map((f) => [`${agentKey}\0${f}`, now])) };
+    saveSessionState(sessionId, { ...state, changes: { ...changes, cumulativeCodeFiles: 0, remindedAt } }, home);
+    // Never demand sniper on a file the agent deleted before stopping (e.g. a scratch
+    // probe rm -rf'd): the tracked list records writes, never removals — re-check the disk
+    // (a relative path resolves against the hook cwd).
+    const present = fresh.filter((f) => existsSync(resolve(hookCwd, f)));
+    if (present.length > 0) {
+      // Advisory (no hard block here — the TaskCompleted gate enforces): flag the
+      // missing proof when the agent owns code but posted no fresh passing receipt.
+      // Window = TTL×5, matching the TaskCompleted receipt gate.
+      const windowMs = resolveTtlSec(process.env) * 1000 * 5;
+      const noReceipt = freshReceiptFromFile(trackFile(sessionId, projectStateDir(process.cwd())), windowMs, now) === null;
+      const note = noReceipt ? ` NO VERIFICATION RECEIPT — ${shortReceiptHint(hookCwd, present)}` : "";
+      // Report recovery (Claude Code only): remember that this stop's final message gets
+      // displaced by the agent's reply to the guard, so the parent can recover the report.
+      if (id === "claude-code") recordGuardEmission(data, sessionId, home, now);
+      return reminderOutput(id, `SNIPER VALIDATION REQUIRED: Agent '${agentType}' modified ${present.length} code file(s): ${present.join(", ")}. Run sniper agent now.${note}`);
     }
   }
+  // A fresh (non-continuation) stop with NO guard emitted: this agent's previous run, if any, no longer applies.
+  if (id === "claude-code") clearGuardRecord(data, sessionId, home);
   return completedOutput(id, `Agent ${agentType} completed (no code changes)`);
 }

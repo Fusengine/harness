@@ -10,6 +10,8 @@ export interface ClaudeHookInput {
   tool_name?: string;
   tool_input?: { file_path?: string; content?: string; new_string?: string; command?: string | string[] };
   cwd?: string;
+  /** Exact session scratchpad dir sent by Claude Code on every hook event. */
+  scratchpad_dir?: string;
   /** Shared Claude/Codex hook field — Codex maps approval_policy=never to "bypassPermissions" (adapters/codex/permission-mode.ts). */ permission_mode?: string;
 }
 
@@ -83,6 +85,7 @@ export function guard(input: ClaudeHookInput): string | null {
     filePath: input.tool_input?.file_path,
     content: input.tool_input?.content ?? input.tool_input?.new_string,
     command: commandToString(input.tool_input?.command),
+    scratchpadDir: typeof input.scratchpad_dir === "string" ? input.scratchpad_dir : undefined,
   });
   if (result.decision === "allow" || !result.prompt) return null;
   return toClaudeResponse(input.hook_event_name ?? "PreToolUse", result.prompt);

@@ -4,6 +4,30 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.115] - 2026-11-10
+
+### Added
+
+- **scan: widen security scanner coverage to all languages present** (`src/runtime/lifecycle/security/scan/*`, `scan-patterns.ts`, `scan.ts`, `src/util/source-languages.ts`) — rule sets split per language family (JS/TS, PHP/Python, native, managed, secrets) with the legacy patterns kept; the scan covers every source language found in the project, with bounded walk and limits. Tests: `scan-compat`, `scan-coverage`, `scan-golden`, `scan-patterns`, `scan-perf`, `scan-precision`, `scan-walk`, `source-languages`.
+
+### Changed
+
+- **confirm: user-facing CONFIRM messages in English** (`src/runtime/confirm/confirm-feedback.ts`, `confirm-gate.ts`) — every CONFIRM prompt and feedback shown to the user is now English, including the Codex sub-agent fan-out path. Tests: `confirm*`, `confirm-feedback`.
+
+### Fixed
+
+- **cartographer: bound SessionStart reads and confine map writes (#121)** (`src/runtime/lifecycle/cartographer/*`, `src/policy/cartographer/*`) — SessionStart reads are size-bounded and map writes are confined to the map directory. Tests: `cartographer-bounded-read`, `cartographer-eco-bounded`, `cartographer-eco-confine`, `cartographer-safe-write`, `cartographer-rss`, `cartographer-characterization`, `cartographer-languages`.
+- **bash-write: allow redirects proven inside the session scratchpad** (`src/policy/guards/bash-write-scratchpad*.ts`, `bash-write.ts`, `src/runtime/gate*.ts`, `handle-pre.ts`, `normalize.ts`) — a redirect whose target is proven to be a regular file directly inside the session scratchpad is no longer blocked; no sniper is demanded for temp/scratchpad files outside the project root. Guard case 04: an edit through the real `/tmp` path of a file the project only links to was blocked and now passes; case 19 is stricter.
+- **bash-write: treat `&>`, `>&file` and zsh `>>&` / `>&|` / `>&!` like `>`** (`src/policy/guards/bash-write-redirect-op.ts`, `bash-write-redirects.ts`, `bash-write-safe-paths.ts`, `src/runtime/prd/prd-bash-targets.ts`) — `&>` / `>&file` writes now ask like `>`, and `&>`, `&>>`, `>&file` reach the scratchpad window like `>`.
+- **security: ask instead of block for `rm -r` strictly inside temp dirs** (`src/policy/guards/security-temp-delete.ts`, `security.ts`) — a temp-dir `rm -r` asks instead of blocking; anything outside the temp roots is unchanged. Tests: `security-temp-delete`.
+- **guards: attribute stop guards to project code and recover sub-agent reports** (`src/runtime/lifecycle/project-code.ts`, `agent-files.ts`, `report-*.ts`, `handle*.ts`, `lifecycle-bridge.ts`) — R3b: each agent is held for its own files; stop guards fire on project code only, in the foreground and for background sub-agent reports. Tests: `guard-attribution`, `guard-project-code`, `guard-report-background`, `guard-report-bg-e2e`, `guard-report-recovery`, `guard-report-refire`.
+- **prd: let the coordinator repair a schema-invalid router** (`src/policy/prd/*`, `src/runtime/prd/prd-router-guard.ts`, `prd-pre-gate.ts`, `prd-post-write.ts`, `src/cli/prd/*`) — a schema-invalid router can be repaired by the coordinator; PRD gives distinct diagnostics. Tests: `prd-router-recovery`, `prd-router-diagnostics`, `prd-router-multiop`, `prd-post-write`.
+
+### Known
+
+- protected-path / PRD / motion still read the legacy redirect list, so `&>` into a protected path asks instead of being denied.
+- More than ~10 KB of guarded background notifications in one prompt: the 4th notification is not inlined.
+
 ## [0.1.114] - 2026-11-10
 
 ### Added

@@ -18,7 +18,7 @@ import type { ConfirmSubmitOutcome } from "./confirm-outcome";
 /** Hosts with a verified UserPromptSubmit feedback channel. */
 const FEEDBACK_HOSTS: ReadonlySet<string> = new Set(["kimi", "codex"]);
 
-/** One line of the "codes en attente" footer: a display code + its command. */
+/** One line of the "pending codes" footer: a display code + its command. */
 export interface ConfirmPendingLine {
   code: string;
   command: string;
@@ -64,16 +64,16 @@ export function confirmFeedbackText(outcome: ConfirmSubmitOutcome, pendings: rea
     case "armed":
       // Codex asks the agent to rerun NOW (the 2026-10-29 incident: it never reran inside the TTL).
       // The full command is shown untruncated but on one line (control chars escaped, see oneLineCommand).
-      if (outcome.rerun) return `[fuse-harness] CONFIRM ${outcome.code} accepté — relance maintenant exactement : ${oneLineCommand(outcome.command) || "(commande non enregistrée)"} (valide 5 min)`;
-      return `[fuse-harness] CONFIRM ${outcome.code} accepté pour : ${truncate(outcome.command || "(commande non enregistrée)", 60)} (valable 5 min)`;
+      if (outcome.rerun) return `[fuse-harness] CONFIRM ${outcome.code} accepted — rerun now exactly: ${oneLineCommand(outcome.command) || "(command not recorded)"} (valid 5 min)`;
+      return `[fuse-harness] CONFIRM ${outcome.code} accepted for: ${truncate(outcome.command || "(command not recorded)", 60)} (valid 5 min)`;
     case "already-consumed":
-      return `[fuse-harness] CONFIRM ${outcome.code} déjà utilisé : l'action a déjà été exécutée — si elle est de nouveau refusée, un nouveau code sera donné.`;
+      return `[fuse-harness] CONFIRM ${outcome.code} already used: the action was already executed — if it is refused again, a new code will be given.`;
     case "unknown-code": {
-      const list = pendings.map((p) => `${p.code} (${truncate(p.command || "(commande non enregistrée)", 40)})`).join(" · ");
-      return `[fuse-harness] CONFIRM ${outcome.code} inconnu — codes en attente : ${list || "aucun"}`;
+      const list = pendings.map((p) => `${p.code} (${truncate(p.command || "(command not recorded)", 40)})`).join(" · ");
+      return `[fuse-harness] CONFIRM ${outcome.code} unknown — pending codes: ${list || "none"}`;
     }
     case "frozen":
-      return `[fuse-harness] CONFIRM ${outcome.code} gelé : un sous-agent est actif (G0) — renvoie le code après.`;
+      return `[fuse-harness] CONFIRM ${outcome.code} frozen: a sub-agent is active (G0) — send the code again afterwards.`;
     case "refused":
       return "";
   }
