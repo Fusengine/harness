@@ -7,6 +7,26 @@
  */
 import { basename } from "node:path";
 import { readAgentToolUses } from "./agent-transcript";
+import type { SessionChanges } from "./code-edit-time";
+
+/** An `agent_id` safe to use as an object key (id-like characters only; never `__proto__`). */
+export function isAgentKey(agentId: unknown): agentId is string {
+  return typeof agentId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(agentId) && agentId !== "__proto__";
+}
+
+/**
+ * Files the PostToolUse hooks recorded for this `agent_id` (hook payloads fired inside a
+ * sub-agent carry it). `null` when the id is absent/invalid or nothing was tagged, so the
+ * caller can fall back to the session-wide list.
+ * @param changes - The persisted session `changes` block.
+ * @param agentId - The SubagentStop payload `agent_id`.
+ * @returns The agent's tagged files, or `null`.
+ */
+export function taggedFilesOf(changes: SessionChanges | undefined, agentId: unknown): string[] | null {
+  if (!isAgentKey(agentId) || !Object.hasOwn(changes?.agentFiles ?? {}, agentId)) return null;
+  const list = changes?.agentFiles?.[agentId];
+  return list && list.length > 0 ? list : null;
+}
 
 /** Tools whose `input.file_path`/`notebook_path` names a file the agent authored. */
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);

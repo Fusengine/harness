@@ -7,7 +7,8 @@ import { BURST_DEDUP_MS } from "../burst-window";
 import { sniperRequiredNotice } from "../notices";
 import { isCodeFile } from "./code-extensions";
 import type { SessionChanges } from "./code-edit-time";
-import { isClaudeScratchpad } from "./scratchpad-path";
+import { isAgentKey } from "./agent-files";
+import { isProjectCode } from "./project-code";
 
 /** `changes` block persisted in per-session state (counts and file list are always present once tracked). */
 type Changes = SessionChanges & { cumulativeCodeFiles: number; modifiedFiles: string[] };
@@ -23,9 +24,10 @@ const VERSION_FILE = /^_{0,2}version_{0,2}\.py$/;
  * @param filePath - The edited file path.
  * @param home - Home dir (defaults to `~`).
  * @param now - Clock (defaults to `Date.now()`).
+ * @param ctx - Optional hook context: `agentId` (PostToolUse `agent_id`, per-agent attribution) and `cwd` (project-root fallback for {@link isProjectCode}).
  * @returns The native hook stdout (possibly empty when not a code file).
  */
-export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, home: string = homedir(), now: number = Date.now()): string {
+export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, home: string = homedir(), now: number = Date.now(), ctx: { agentId?: unknown; cwd?: string } = {}): string {
   if (!filePath || !isCodeFile(filePath)) return "";
   const sid = sanitizeSessionId(sessionIdRaw) ?? "unknown";
   const state = loadSessionState(sid, home);
@@ -33,13 +35,18 @@ export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, hom
   const files = [...prev.modifiedFiles];
   let count = prev.cumulativeCodeFiles;
   if (!files.includes(filePath)) { count += 1; files.push(filePath); }
-  // Per-file edit stamp (release gate + verifiedAt cut-off). Version-bump and scratchpad files stay tracked as before but are not stamped, so they never re-arm a gate.
+  // Per-file edit stamp (release gate + verifiedAt cut-off). Version-bump files and anything that is not project code (scratchpad, $TMPDIR, outside the root) stay tracked as before but are not stamped, so they never re-arm a gate.
   const editedAt = { ...(prev.editedAt ?? {}) };
-  if (!VERSION_FILE.test(basename(filePath)) && !isClaudeScratchpad(filePath)) editedAt[filePath] = now;
+  if (!VERSION_FILE.test(basename(filePath)) && isProjectCode(filePath, ctx.cwd)) editedAt[filePath] = now;
+  // Per-agent attribution: a PostToolUse fired inside a sub-agent carries its `agent_id`.
+  const agentFiles = { ...(prev.agentFiles ?? {}) };
+  if (isAgentKey(ctx.agentId) && !agentFiles[ctx.agentId]?.includes(filePath)) agentFiles[ctx.agentId] = [...(agentFiles[ctx.agentId] ?? []), filePath];
   state.changes = {
+    ...prev,
     cumulativeCodeFiles: count,
     modifiedFiles: files,
     editedAt,
+    agentFiles,
     lastModifiedFile: filePath,
     lastCheck: new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z"),
   } satisfies Changes;
