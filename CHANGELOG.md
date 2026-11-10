@@ -4,6 +4,12 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.116] - 2026-11-10
+
+### Fixed
+
+- **bash-write: fd-dup and /dev/null targets glued to a closing paren** (`src/policy/guards/bash-write-redirect-op.ts`) — Bash write gate no longer asks to confirm `(cmd 2>&1)`, `(cmd >&2)`, `(cmd 2>&-)` or `(cmd >/dev/null)` — an fd duplication/close or /dev/null target glued to a closing parenthesis was read as a file named `1)` (regression from 0.1.115). Every other redirect target keeps its previous verdict. Tests: `bash-write-fd-dup-paren`.
+
 ## [0.1.115] - 2026-11-10
 
 ### Added
