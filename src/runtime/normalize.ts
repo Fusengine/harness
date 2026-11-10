@@ -39,6 +39,8 @@ export interface NormalizedEvent {
   agentId?: string;
   /** Harness-reported working directory used to scope Codex authorization. */
   cwd?: string;
+  /** Claude Code only: the exact session scratchpad dir (`scratchpad_dir`); no other host sends an equivalent field, so it stays undefined elsewhere. */
+  scratchpadDir?: string;
   /** Validated Cursor multi-root workspace paths in wire order. */
   workspaceRoots?: string[];
   /**
@@ -92,6 +94,7 @@ export function normalizeEvent(id: string, payload: Record<string, unknown>): No
     permissionMode: str(payload.permission_mode),
     toolUseId: str(payload.tool_use_id),
     cwd: str(payload.cwd),
+    scratchpadDir: id === "claude-code" ? str(payload.scratchpad_dir) : undefined,
   };
   // Codex's `apply_patch` (its PRIMARY edit primitive) carries the whole change
   // set as a freeform patch in `command` — no `file_path`/`content`, so the

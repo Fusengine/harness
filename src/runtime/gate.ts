@@ -98,7 +98,7 @@ export async function runGates(input: GateInput): Promise<Prompt | null> {
   const { raw: existingLines, code: existingCodeLines, content: existingContent } = existingLineCounts(input.filePath);
   let quick: PolicyResult;
   try {
-    quick = evaluate({ tool: input.tool, filePath: input.filePath, content: input.content, command: input.command, agentType: input.agentType, existingLines, existingContent, oldString: input.oldString, isReplaceAll: input.isReplaceAll, neverApproval: input.neverApproval });
+    quick = evaluate({ tool: input.tool, filePath: input.filePath, content: input.content, command: input.command, scratchpadDir: input.scratchpadDir, agentType: input.agentType, existingLines, existingContent, oldString: input.oldString, isReplaceAll: input.isReplaceAll, neverApproval: input.neverApproval });
   } catch {
     return FAIL_CLOSED;
   }
