@@ -62,8 +62,18 @@ test("neverApproval anti-chaining: a single background & separates commands — 
   expect(r.prompt?.kind).toBe("ask");
 });
 
+// Target is /dev/null: `&> /tmp/out.txt` used to pass only because bash-write ignored `&>` (the bug fixed in
+// bash-write-amp-redirect.test.ts); a real file write now asks exactly like `> /tmp/out.txt`.
 test("neverApproval: bash &> redirect is NOT chaining — still auto-approves", () => {
-  const r = evaluate(never("git commit -m x &> /tmp/out.txt"));
+  const r = evaluate(never("git commit -m x &> /dev/null"));
   expect(r.decision).toBe("warn");
   expect(r.prompt?.kind).toBe("inform");
+});
+
+test("neverApproval: `&>` to a real file asks, exactly like `>`", () => {
+  const amp = evaluate(never("git commit -m x &> /tmp/out.txt"));
+  const plain = evaluate(never("git commit -m x > /tmp/out.txt"));
+  expect(amp.decision).toBe(plain.decision);
+  expect(amp.prompt?.kind).toBe(plain.prompt?.kind);
+  expect(amp.prompt?.kind).toBe("ask");
 });

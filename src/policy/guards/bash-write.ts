@@ -1,7 +1,7 @@
 import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
 import { hasSafeWriteTarget, isSafeCommandTarget, isSafeWritePath } from "./bash-write-safe-paths";
-import { shellOutputRedirects } from "./bash-write-redirects";
+import { shellFileWriteRedirects } from "./bash-write-redirects";
 import { unquotedShellText } from "./bash-write-unquoted";
 import {
   ASK_WRITERS, CODE_COMMAND_WRITE, CODE_FILE_LITERAL, CODE_MUTATORS, INLINE_JS_ANCHOR, INLINE_JS_STDIN_ANCHOR,
@@ -78,7 +78,7 @@ export function bashWriteGuard(ctx: GuardContext): Prompt | null {
   const cmd: string = ctx.command;
   const stripped = cmd.trim();
   const unquoted = unquotedShellText(cmd);
-  const redirects = shellOutputRedirects(cmd).filter((redirect) => redirect.target !== "/dev/null");
+  const redirects = shellFileWriteRedirects(cmd).filter((redirect) => redirect.target !== "/dev/null");
 
   const mutator = CODE_MUTATORS.find((m) => (m.matches ? m.matches(cmd) : m.re.test(cmd)));
   if (mutator) return blockCodeWrite(`${mutator.desc} — Use Edit/Write tools instead`);
