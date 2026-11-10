@@ -22,7 +22,9 @@ const READERS = new Set(["cd", "pwd", "echo", "true", "false", "cat", "head", "t
 const UNSAFE_ARGS: Readonly<Record<string, RegExp>> = { sort: /^(?:-[A-Za-z0-9]*[oST]|--)/ };
 /** Test/lint/build runners already allowed without a redirect (SAFE_PREFIXES); they run arbitrary code, so no redirect may follow them. */
 const RUNNERS: ReadonlyArray<readonly string[]> = [["bun", "test"], ["bun", "run"], ["bunx"], ["npx"], ["npm", "test"], ["npm", "run"], ["tsc"], ["biome"], ["eslint"], ["prettier"], ["ruff"], ["pyright"]];
-const REDIRECT = /\d*>>?[ \t]*[^\s;&|<>)]+|\d*>&(?:\d+|-)/g;
+/** Fd dup first (`2>&1`), then `N>`, `N>>`, `&>`, `&>>`, `>&file` with their target word. */
+const REDIRECT = /\d*>&(?:\d+|-)|(?:&|\d*)>>?&?[ \t]*[^\s;&|<>)]+/g;
+const DUP_ONLY = /^\d*>&(?:\d+|-)$/;
 const PLAIN_WORD = /^[A-Za-z0-9_./:=,+%@-]+$/;
 const ASSIGN = /^[A-Za-z_][A-Za-z0-9_]*\+?=/;
 
@@ -65,7 +67,7 @@ export function parseStatements(cmd: string): Statement[] | null {
     const words = text.replace(REDIRECT, " ").split(/[ \t]+/).filter(Boolean);
     const kind = classify(words);
     if (kind === null) return null;
-    const files = redirects.filter((r) => !/^\d*>>?[ \t]*["']?\/dev\/null/.test(r) && !r.includes(">&")).length;
+    const files = redirects.filter((r) => !/^(?:&|\d*)>>?&?[ \t]*["']?\/dev\/null/.test(r) && !DUP_ONLY.test(r)).length;
     out.push({ text, start: from, before, after: sep?.[0] ?? "", kind, words, files });
     from = end + (sep?.[0].length ?? 0);
     before = sep?.[0] ?? "";

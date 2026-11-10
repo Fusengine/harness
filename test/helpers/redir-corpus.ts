@@ -7,7 +7,7 @@ export const P = "/Users/me/proj";
 export interface CorpusRow {
   id: string;
   cmd: string;
-  /** Verdict of the pre-change guard (main), frozen from a real run. */
+  /** Verdict of the guard WITHOUT the scratchpad window, frozen from a real run: main's, except `&>`/`>&file` rows where the amp branch intentionally tightened allow to ask. */
   old: "allow" | "ask" | "block";
   /** The only rows allowed to flip to allow. */
   safe?: boolean;

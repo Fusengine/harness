@@ -1,3 +1,4 @@
+import { parseOutputRedirect } from "./bash-write-redirect-op";
 import { isFreshOrRegular, isPlainComponent, scratchpadDirOf } from "./bash-write-scratchpad-target";
 import { scratchpadVarResolves } from "./bash-write-scratchpad-var";
 import { parseStatements, type Statement } from "./bash-write-scratchpad-words";
@@ -29,21 +30,27 @@ function matchTarget(cmd: string, pos: number, dir: string): { end: number; vari
   return { end: pos + text.length, variable: variable !== undefined };
 }
 
-/** Walk every `>` of the command; returns the number of file redirects and whether one used `$S`, or null if any `>` is not a proven safe form. */
-function scanRedirects(cmd: string, dir: string): { files: number; variable: boolean } | null {
+/** Operators the window accepts, as `parseOutputRedirect` spells them: `>`, `>>`, `N>`, `N>>`, `&>`, `&>>`, `>&file`. `>|`, `>>&`, `&2>` and the rest keep the old verdict. */
+const OPERATOR = /^(?:\d*>{1,2}|&>{1,2}|>&)$/;
+
+/** Walk every `>` of the command; returns the number of file redirects, whether one used `$S` and the indexes of the `&` that belong to accepted redirect operators, or null if any `>` is not a proven safe form. */
+function scanRedirects(cmd: string, dir: string): { files: number; variable: boolean; amps: number[] } | null {
   let files = 0;
   let variable = false;
+  const amps: number[] = [];
   let at = cmd.indexOf(">");
   while (at !== -1) {
-    if (["&", "<", "}"].includes(cmd[at - 1] ?? "")) return null;
-    let pos = at + 1;
-    if (cmd[pos] === ">") pos++;
-    else if (cmd[pos] === "&") {
-      const dup = DUP.exec(cmd.slice(pos));
-      if (!dup) return null;
-      at = cmd.indexOf(">", pos + dup[0].length);
+    if (["<", "}"].includes(cmd[at - 1] ?? "")) return null;
+    const dup = cmd[at - 1] !== "&" && cmd[at + 1] === "&" ? DUP.exec(cmd.slice(at + 1)) : null;
+    if (dup) {
+      at = cmd.indexOf(">", at + 1 + dup[0].length);
       continue;
     }
+    const { redirect, opEnd } = parseOutputRedirect(cmd, at, 0, cmd.length);
+    if (redirect === null || !OPERATOR.test(redirect.operator) || cmd[redirect.start - 1] === "&") return null;
+    if (redirect.operator.startsWith("&")) amps.push(redirect.start);
+    else if (redirect.operator.endsWith("&")) amps.push(opEnd);
+    let pos = opEnd + 1;
     while (cmd[pos] === " " || cmd[pos] === "\t") pos++;
     const devNull = DEV_NULL.exec(cmd.slice(pos));
     const target = devNull ? { end: pos + devNull[0].length, variable: false } : matchTarget(cmd, pos, dir);
@@ -52,7 +59,7 @@ function scanRedirects(cmd: string, dir: string): { files: number; variable: boo
     variable ||= target.variable;
     at = cmd.indexOf(">", target.end);
   }
-  return { files, variable };
+  return { files, variable, amps };
 }
 
 /** A redirect may not follow code that could have planted a link: only a runner's own redirect (opened before it starts) is allowed. */
@@ -91,8 +98,10 @@ export function redirectsOnlyInScratchpad(cmd: string, scratchpadDir: unknown): 
   try {
     const dir = scratchpadDirOf(scratchpadDir);
     if (dir === null || cmd.length > MAX_LENGTH || !PLAIN_TEXT.test(cmd) || OPAQUE_SYNTAX.test(cmd)) return false;
-    if (/&/.test(cmd.replace(/&&|\d*>&(?:\d+|-)/g, ""))) return false;
     const redirects = scanRedirects(cmd, dir);
+    // Any `&` other than `&&`, a descriptor dup or a scanned redirect operator is a background job / `|&`.
+    const rest = redirects === null ? cmd : redirects.amps.reduce((s, i) => `${s.slice(0, i)} ${s.slice(i + 1)}`, cmd);
+    if (/&/.test(rest.replace(/&&|\d*>&(?:\d+|-)/g, ""))) return false;
     const statements = redirects === null ? null : parseStatements(cmd);
     if (redirects === null || statements === null || redirects.files === 0 || !orderIsSafe(statements)) return false;
     // Any `$S` anywhere (not only in a target) must be provably the scratchpad dir.
