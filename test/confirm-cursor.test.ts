@@ -31,7 +31,7 @@ test("cursor: an ask downgraded to deny now carries a CONFIRM code, and CONFIRM 
   const denied = await handleHook("cursor", pre(s, cmd, cwd), opts);
   const d = JSON.parse(denied.stdout) as { permission: string; user_message: string; agent_message: string };
   expect(d.permission).toBe("deny");
-  expect(d.agent_message).toContain("Pour autoriser, réponds : CONFIRM ");
+  expect(d.agent_message).toContain("To allow, reply: CONFIRM ");
   await handleHook("cursor", submit(s, `CONFIRM ${codeFrom(denied.stdout)}`, cwd), { ...opts, now: 1100 });
   const allowed = await handleHook("cursor", pre(s, cmd, cwd), { ...opts, now: 1200 });
   expect(allowed.stdout).not.toContain("\"deny\"");
@@ -59,12 +59,12 @@ test("cursor: a multi-candidate MCP call is never confirmable (a benign head can
   const mcp = { hook_event_name: "beforeMCPExecution", conversation_id: s, session_id: s, command: "ls", tool_input: { command: "rm -rf ./build" }, cwd, workspace_roots: [cwd] };
   const out = await handleHook("cursor", mcp, opts);
   expect(JSON.parse(out.stdout).permission).toBe("deny");
-  expect(out.stdout).not.toContain("Pour autoriser");
+  expect(out.stdout).not.toContain("To allow");
 });
 
 test("cursor: an irreversible command (git push --force) is never offered a CONFIRM code", async () => {
   const cwd = dir("fh-cc-cwd-");
   const out = await handleHook("cursor", pre(`cursor-${randomUUID()}`, "git push --force origin main", cwd), { now: 1000, cwd, home: dir("fh-cc-home-") });
   expect(JSON.parse(out.stdout).permission).toBe("deny");
-  expect(out.stdout).not.toContain("Pour autoriser");
+  expect(out.stdout).not.toContain("To allow");
 });

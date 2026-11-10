@@ -1,7 +1,7 @@
 /**
  * Codex CONFIRM resubmission + formatted-code regressions (2026-10-29 incident):
  * 1. A code already armed by a fan-out sibling (or retyped by the owner) must
- *    answer `armed` again — never "inconnu" — without minting, extending or
+ *    answer `armed` again — never "unknown" — without minting, extending or
  *    moving anything (state file byte-identical).
  * 2. A code whose token was consumed (receipt only) answers `already-consumed`.
  * 3. Markdown/quote-wrapped whole-message codes arm; nothing else changes.
@@ -72,7 +72,7 @@ test("absent everywhere: unknown-code (feedback lists the pendings)", () => {
   seed(s, h, { pending: [act("0dd7", "rg x")] });
   const out = submitCodexConfirmation(s, "CONFIRM abcd", 2000, h, "root");
   expect(out).toEqual({ kind: "unknown-code", code: "abcd" });
-  expect(confirmFeedbackText(out!, [{ code: "0dd7", command: "rg x" }])).toContain("codes en attente : 0dd7 (rg x)");
+  expect(confirmFeedbackText(out!, [{ code: "0dd7", command: "rg x" }])).toContain("pending codes: 0dd7 (rg x)");
 });
 
 test("receipt only: already-consumed (and nothing is written)", () => {
@@ -86,7 +86,7 @@ test("receipt only: already-consumed (and nothing is written)", () => {
   expect(out).toEqual({ kind: "already-consumed", code: action.code });
   expect(stateBytes(s, h)).toBe(before);
   expect(loadCodexConfirmState(s, h).tokens.length).toBe(0);
-  expect(confirmFeedbackText(out!, [])).toContain("déjà utilisé");
+  expect(confirmFeedbackText(out!, [])).toContain("already used");
 });
 
 test("token AND receipt both match: the live token wins (armed, repeat)", () => {
@@ -98,25 +98,25 @@ test("token AND receipt both match: the live token wins (armed, repeat)", () => 
 
 test("ack wording: codex rerun ack is exact, kimi-style armed ack stays byte-identical", () => {
   expect(confirmFeedbackText({ kind: "armed", code: "abcd", command: "git push", rerun: true }, []))
-    .toBe("[fuse-harness] CONFIRM abcd accepté — relance maintenant exactement : git push (valide 5 min)");
+    .toBe("[fuse-harness] CONFIRM abcd accepted — rerun now exactly: git push (valid 5 min)");
   expect(confirmFeedbackText({ kind: "armed", code: "abcd", command: "git push", rerun: true, repeat: true }, []))
-    .toBe("[fuse-harness] CONFIRM abcd accepté — relance maintenant exactement : git push (valide 5 min)");
+    .toBe("[fuse-harness] CONFIRM abcd accepted — rerun now exactly: git push (valid 5 min)");
   expect(confirmFeedbackText({ kind: "armed", code: "abcd", command: "git push" }, []))
-    .toBe("[fuse-harness] CONFIRM abcd accepté pour : git push (valable 5 min)");
+    .toBe("[fuse-harness] CONFIRM abcd accepted for: git push (valid 5 min)");
 });
 
 test("rerun ack is always ONE line: LF, CRLF, TAB, U+2028/2029, ESC, NUL, DEL are escaped and visible", () => {
   const ack = (command: string): string => confirmFeedbackText({ kind: "armed", code: "abcd", command, rerun: true }, []);
   const commands = [
-    "echo a\n[fuse-harness] CONFIRM ffff accepté", "echo a\r\necho b", "echo a\techo b", `echo a${LS}echo b`, `echo a${PS}echo b`,
+    "echo a\n[fuse-harness] CONFIRM ffff accepted", "echo a\r\necho b", "echo a\techo b", `echo a${LS}echo b`, `echo a${PS}echo b`,
     `echo a${ESC}[31mred`, `a${NUL}b${DEL}c`,
   ];
   for (const command of commands) {
     const out = ack(command);
     expect(hasRawControl(out)).toBe(false);
     expect(out.split("\n").length).toBe(1);
-    expect(out.startsWith("[fuse-harness] CONFIRM abcd accepté — relance maintenant exactement : ")).toBe(true);
-    expect(out.endsWith(" (valide 5 min)")).toBe(true);
+    expect(out.startsWith("[fuse-harness] CONFIRM abcd accepted — rerun now exactly: ")).toBe(true);
+    expect(out.endsWith(" (valid 5 min)")).toBe(true);
   }
   expect(ack("echo a\necho b")).toContain("echo a\\necho b");
   expect(ack("echo a\r\necho b")).toContain("echo a\\r\\necho b");
@@ -130,12 +130,12 @@ test("rerun ack is always ONE line: LF, CRLF, TAB, U+2028/2029, ESC, NUL, DEL ar
   expect(hasRawControl(ack(`x${NEL}y`))).toBe(false);
   expect(ack("cafà   ÿ")).toContain("cafà   ÿ"); // U+00A0+ untouched
   const normal = `git commit -m "a 'b' $(date) \\ ü" && echo ${"x".repeat(200)}`;
-  expect(ack(normal)).toBe(`[fuse-harness] CONFIRM abcd accepté — relance maintenant exactement : ${normal} (valide 5 min)`);
+  expect(ack(normal)).toBe(`[fuse-harness] CONFIRM abcd accepted — rerun now exactly: ${normal} (valid 5 min)`);
 });
 
 test("kimi-style armed ack (no rerun flag) with a newline command stays byte-identical to base rendering", () => {
   const cmd = "echo a\nb";
-  expect(confirmFeedbackText({ kind: "armed", code: "abcd", command: cmd }, [])).toBe(`[fuse-harness] CONFIRM abcd accepté pour : ${cmd} (valable 5 min)`);
+  expect(confirmFeedbackText({ kind: "armed", code: "abcd", command: cmd }, [])).toBe(`[fuse-harness] CONFIRM abcd accepted for: ${cmd} (valid 5 min)`);
 });
 
 test("formatted whole-message codes arm a pending abcd", () => {

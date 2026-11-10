@@ -75,8 +75,8 @@ the code); codex consumes it at arming, as before. The 5-minute TTL applies
 to the ARMED token and the receipt only. Every prompt that is exactly
 `CONFIRM <code>` gets a **visible acknowledgement** on the hosts with a
 verified UserPromptSubmit channel — kimi (raw stdout) and codex
-(`additionalContext` envelope): `[fuse-harness] CONFIRM xxxx accepté pour :
-<commande> (valable 5 min)`, or `inconnu` followed by the codes
+(`additionalContext` envelope): `[fuse-harness] CONFIRM xxxx accepted for:
+<command> (valid 5 min)`, or `unknown — pending codes: …` listing the codes
 still pending. An incidental code inside a longer prompt still arms, but
 silently (byte-identical output). Cursor has a channel (`user_message`) but
 through a separate envelope path — no emission yet; claude-code keeps its

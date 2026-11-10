@@ -26,7 +26,7 @@ const codexPre = (s: string, command: string, toolUseId: string, workdir: string
 });
 const submit = (s: string, prompt: string) => ({ hook_event_name: "UserPromptSubmit", session_id: s, prompt });
 
-/** Extract the 4-hex-char code from a "Pour autoriser, réponds : CONFIRM xxxx" deny message. */
+/** Extract the 4-hex-char code from a "To allow, reply: CONFIRM xxxx" deny message. */
 function codeFromDeny(stdout: string): string {
   const m = stdout.match(/CONFIRM ([0-9a-f]{4})/i);
   const code = m?.[1];
