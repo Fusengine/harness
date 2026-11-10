@@ -22,9 +22,10 @@ import { shellOutputRedirects } from "../../policy/guards/bash-write-redirects";
 import { extraBashWriteTargets } from "./prd-bash-targets";
 import {
   candidateAgentNames, classifyPrdPath, evaluateWriteOwnership, isPrdEnabled, isPrdScopedPath,
-  prdProjectRoot, readAllTaskFiles, readRouter,
+  prdProjectRoot, readAllTaskFiles, readRouterSnapshotSync,
   type PrdOwnershipVerdict, type PrdPathKind, type PrdTaskFile,
 } from "../../policy/prd";
+import { brokenRouterVerdict, patchTextOf, routerWriteViolation } from "./prd-router-guard";
 import { loadTrack, withTrack } from "../../tracking/store";
 import { recordPrdOwner } from "../../tracking/session-state";
 import { resolvePrdIdentity } from "./prd-identity";
@@ -117,18 +118,26 @@ export async function prdPreGate(
   const files = prdCandidateFiles(event).map(canonicalFilePath);
   if (files.length === 0) return null;
 
-  const router = await readRouter(root, homeSeg);
-  if (router === null) {
-    if (!files.some((f) => isPrdScopedPath(f, root, homeSeg))) return null;
-    return denyOutcome(id, event, trackFilePath, now, "PRD router is malformed JSON — fix apex/prd.json or unset FUSE_PRD.");
+  const mcpDir = projectLayout(cwd).cacheDir;
+  const identity = resolvePrdIdentity(id, event);
+  const snapshot = readRouterSnapshotSync(root, homeSeg);
+  const routerState = snapshot.state;
+  if (routerState.state !== "ok") {
+    // Broken router (absent / syntax / schema): never the generic deny — the
+    // coordinator's router-only repair is allowed, everything else is denied
+    // with the precise diagnostic (prd-router-guard.ts).
+    const verdict = brokenRouterVerdict({ snapshot, event, patch: patchTextOf(event, payload), files, root, homeSeg, identity });
+    if (verdict === null) return null;
+    if (verdict.allow === false) return denyOutcome(id, event, trackFilePath, now, verdict.reason);
+    return allowOutcome(id, event, payload, mcpDir, cwd, { trackFile: trackFilePath, now });
   }
+  const router = routerState.router;
 
   const inScope = files
     .map((f) => ({ file: f, kind: classifyPrdPath(f, root, homeSeg, router) }))
     .filter((c): c is { file: string; kind: PrdPathKind } => c.kind !== null && c.kind.kind !== "other");
   if (inScope.length === 0) return null;
 
-  const identity = resolvePrdIdentity(id, event);
   const track = await loadTrack(trackFilePath);
   // Mutated in-loop (never the loaded track): a 2nd agent-report file in the
   // SAME envelope must see the 1st file's pending bind, or a single agentId
@@ -148,6 +157,9 @@ export async function prdPreGate(
     }
     const verdict: PrdOwnershipVerdict = evaluateWriteOwnership({ kind, identity, taskFile, bindings });
     if (verdict.allow === false) return denyOutcome(id, event, trackFilePath, now, `${file}: ${verdict.reason}`);
+    // Prevention: never let a write turn the VALID router invalid (underivable content is not judged).
+    const turnsInvalid = kind.kind === "router" ? routerWriteViolation(event, patchTextOf(event, payload), snapshot.text, root, homeSeg) : null;
+    if (turnsInvalid !== null) return denyOutcome(id, event, trackFilePath, now, `${file}: ${turnsInvalid}`);
     if (verdict.allow === true && verdict.bind) {
       binds.push(verdict.bind);
       bindings = { ...bindings, [verdict.bind.agentId]: verdict.bind.name };
@@ -167,6 +179,5 @@ export async function prdPreGate(
   if (binds.length > 0) {
     await withTrack(trackFilePath, (t) => binds.reduce((acc, b) => recordPrdOwner(acc, b.agentId, b.name), t));
   }
-  const mcpDir = projectLayout(cwd).cacheDir;
   return allowOutcome(id, event, payload, mcpDir, cwd, { trackFile: trackFilePath, now });
 }
