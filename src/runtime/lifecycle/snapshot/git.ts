@@ -1,4 +1,10 @@
 import { execSync } from "node:child_process";
+import { parseEnvInt } from "../../../config/env";
+
+/** Env var overriding the per-git-call timeout (ms); tests pin it so a loaded runner cannot drop the section. */
+export const GIT_TIMEOUT_ENV = "FUSE_SNAPSHOT_GIT_TIMEOUT_MS";
+/** Default per-git-call timeout: the SessionStart hook must stay snappy, a slow git omits the section. */
+const DEFAULT_GIT_TIMEOUT_MS = 150;
 
 /**
  * Run a git subcommand at `root` with a short timeout, returning trimmed stdout.
@@ -14,7 +20,7 @@ function git(root: string, args: string): string {
     return execSync(`git ${args}`, {
       cwd: root,
       encoding: "utf8",
-      timeout: 150,
+      timeout: parseEnvInt(process.env[GIT_TIMEOUT_ENV], DEFAULT_GIT_TIMEOUT_MS),
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch {
