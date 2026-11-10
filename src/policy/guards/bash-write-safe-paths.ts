@@ -1,7 +1,7 @@
 import { join, normalize } from "node:path";
 import { homedir } from "node:os";
 import { claudeHome, fusengineCache } from "../../runtime/home-state";
-import { shellOutputRedirects } from "./bash-write-redirects";
+import { shellFileWriteRedirects } from "./bash-write-redirects";
 
 /**
  * Writable paths the harness owns — writes here never need Write/Edit's APEX
@@ -25,7 +25,7 @@ function resolvePath(raw: string): string {
 
 /** True when a `>`/`>>` redirect targets a harness-owned safe path (parity is_safe_write_path). */
 export function isSafeWritePath(cmd: string): boolean {
-  const targets = shellOutputRedirects(cmd)
+  const targets = shellFileWriteRedirects(cmd)
     .map((redirect) => resolvePath(redirect.target))
     .filter((target) => target !== "/dev/null");
   return targets.length > 0 && targets.every((target) => SAFE_WRITE_PATHS.some((safe) => target === safe || target.startsWith(safe + "/")));

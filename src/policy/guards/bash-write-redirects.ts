@@ -1,5 +1,9 @@
-/** One active shell output-redirection operator and its parsed target. */
-export type ShellRedirect = Readonly<{ start: number; operator: string; target: string }>;
+import { parseOutputRedirect } from "./bash-write-redirect-op";
+
+/** One active shell output-redirection operator and its parsed target. `extended` marks the
+ * ampersand forms (`&>`, `>&word`, `&&>`...) the legacy scanner skipped; only
+ * {@link shellFileWriteRedirects} returns them. */
+export type ShellRedirect = Readonly<{ start: number; operator: string; target: string; extended?: true }>;
 
 function closingParen(input: string, start: number): number {
   let depth = 1;
@@ -59,27 +63,6 @@ function commandPosition(input: string, index: number, start: number): boolean {
   const prefix = input.slice(start, index);
   const segment = prefix.slice(Math.max(prefix.lastIndexOf(";"), prefix.lastIndexOf("|"), prefix.lastIndexOf("&"), prefix.lastIndexOf("\n")) + 1).trim();
   return segment === "" || /^(?:if|elif|while|until|then|do|!)$/.test(segment);
-}
-
-function readTarget(input: string, start: number, end: number): string {
-  let out = "";
-  let quote: "'" | '"' | null = null;
-  for (let i = start; i < end; i++) {
-    const ch = input[i] ?? "";
-    if (ch === "\\" && quote !== "'") {
-      if (i + 1 < end) out += input[++i] ?? "";
-      continue;
-    }
-    if (quote) {
-      if (ch === quote) quote = null;
-      else out += ch;
-      continue;
-    }
-    if (ch === "'" || ch === '"') { quote = ch; continue; }
-    if (/\s|[;&|<>]/.test(ch)) break;
-    out += ch;
-  }
-  return out;
 }
 
 function scanDoubleQuote(input: string, start: number, end: number, out: ShellRedirect[]): number {
@@ -178,23 +161,23 @@ function scanRange(input: string, start: number, end: number, out: ShellRedirect
       i = close;
       continue;
     }
-    if (ch !== ">") continue;
-    if (input[i + 1] === "(") continue;
-    if (input[i - 1] === "&") { if (input[i + 1] === ">") i++; continue; }
-    let opStart = i;
-    while (opStart > start && /\d/.test(input[opStart - 1] ?? "")) opStart--;
-    if (input[opStart - 1] === "&") opStart--;
-    let cursor = i + (input[i + 1] === ">" || input[i + 1] === "|" ? 2 : 1);
-    const operator = input.slice(opStart, cursor);
-    while (/\s/.test(input[cursor] ?? "")) cursor++;
-    if (input[cursor] === "&") continue;
-    const target = readTarget(input, cursor, end);
-    if (target) out.push({ start: opStart, operator, target });
+    if (ch !== ">" || input[i + 1] === "(") continue;
+    const { redirect, opEnd } = parseOutputRedirect(input, i, start, end);
+    if (!redirect) continue;
+    out.push(redirect);
+    if (redirect.extended) i = opEnd;
   }
 }
 
-/** Return active output redirects, excluding quoted/escaped `>` characters. */
+/** Return the legacy `>`-family output redirects (no `&>` / `>&word` / `&&>` forms; quoted/escaped
+ * `>` characters excluded). Consumers outside the bash-write guard keep this view unchanged. */
 export function shellOutputRedirects(command: string): ShellRedirect[] {
+  return shellFileWriteRedirects(command).filter((redirect) => !redirect.extended);
+}
+
+/** Every redirect that writes a file: the legacy list plus the ampersand forms (`&>`, `&>>`, `>&file`,
+ * `>>&file`, `N>&file`, `&&>`). Descriptor duplication (`>&2`, `2>&1`, `>&-`) is never included. */
+export function shellFileWriteRedirects(command: string): ShellRedirect[] {
   const out: ShellRedirect[] = [];
   scanRange(command, 0, command.length, out);
   return out;

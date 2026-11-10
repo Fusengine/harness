@@ -100,7 +100,7 @@ function scanCommands(input: string, start: number, end: number, out: string[]):
 /**
  * Tokenizes one simple-command string into unquoted words (quotes unwrapped,
  * backslash-escapes resolved outside single quotes) — same unquoting
- * contract as `bash-write-redirects.ts`'s own `readTarget`.
+ * contract as `bash-write-redirect-op.ts`'s own `readTarget`.
  */
 function tokenize(segment: string): string[] {
   const tokens: string[] = [];
