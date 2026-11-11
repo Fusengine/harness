@@ -4,6 +4,7 @@
  * genuine direct work — not only `Task`/`Agent` sub-agent spawns. Mirrors the
  * Python core-guards `_shared/apex_constants.py` + `track-subagent-research.py`.
  */
+import { isCodexNativeWebTool } from "../runtime/codex-web-tool";
 
 /** A REQUIRED_AGENTS name credited for a classified direct tool use. */
 export type ExplorePhase = "explore-codebase" | "research-expert";
@@ -80,7 +81,7 @@ function bashExecutable(cmd: string): string {
  * @returns The credited phase + cache flag, or `null`.
  */
 export function classifyExplore(tool: string, input: Record<string, unknown> | undefined): ExploreHit | null {
-  if (RESEARCH_TOOLS.has(tool)) return { phase: "research-expert", cacheHit: false };
+  if (RESEARCH_TOOLS.has(tool) || isCodexNativeWebTool(tool)) return { phase: "research-expert", cacheHit: false };
   if (EXPLORE_TOOLS.has(tool)) return { phase: "explore-codebase", cacheHit: false };
   if (tool === "Read") {
     const path = String(input?.file_path ?? input?.path ?? "");

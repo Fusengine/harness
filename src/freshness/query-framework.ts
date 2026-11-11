@@ -5,6 +5,7 @@
  * `detectFramework()` always yields "generic" — the query keywords are the
  * only framework signal a doc consultation carries.
  */
+import { codexWebQueryText, isCodexNativeWebTool } from "../runtime/codex-web-tool";
 
 /**
  * Ordered patterns, EXACT parity with the Python list (same order, same
@@ -50,8 +51,10 @@ const QUERY_FIELDS = ["query", "queries", "libraryId", "libraryName", "prompt", 
  * cache — classification wants ALL the text (e.g. WebFetch url + prompt).
  * @param input - The normalized tool_input (absent on some harnesses).
  */
-export function docQueryOf(input: Record<string, unknown> | undefined): string {
+export function docQueryOf(input: Record<string, unknown> | undefined, tool?: string): string {
   if (!input) return "";
+  // Codex `web.run` carries its text in `search_query[].q` / `open[].ref_id`; every other tool keeps the fields below.
+  if (tool !== undefined && isCodexNativeWebTool(tool)) return codexWebQueryText(input);
   const parts: string[] = [];
   for (const key of QUERY_FIELDS) {
     const v = input[key];
@@ -67,7 +70,8 @@ export function docQueryOf(input: Record<string, unknown> | undefined): string {
  * (the event's framework — "generic" for pathless MCP calls).
  * @param input - The doc tool's tool_input.
  * @param fallback - The event's file-detected framework.
+ * @param tool - The tool name; only Codex's `web.run` changes how the input is read.
  */
-export function docFramework(input: Record<string, unknown> | undefined, fallback: string): string {
-  return frameworkFromQuery(docQueryOf(input)) ?? fallback;
+export function docFramework(input: Record<string, unknown> | undefined, fallback: string, tool?: string): string {
+  return frameworkFromQuery(docQueryOf(input, tool)) ?? fallback;
 }

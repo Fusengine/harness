@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { claudeHome } from "../home-state";
+import { codexWebQueryText, isCodexNativeWebTool } from "../codex-web-tool";
 import { isoUtc, todayUtc } from "./security/skill-state";
 
 /** A recorded changelog research query. */
@@ -25,8 +26,9 @@ interface ChangelogQuery {
  * @param home - Home dir.
  */
 export function trackWatchResearch(tool: string, input: Record<string, unknown>, now: number = Date.now(), home: string = homedir()): void {
-  if (!tool.includes("exa") && !tool.includes("WebFetch") && !tool.includes("WebSearch")) return;
-  const query = String(input.query ?? input.url ?? input.prompt ?? "");
+  const codexWeb = isCodexNativeWebTool(tool);
+  if (!tool.includes("exa") && !tool.includes("WebFetch") && !tool.includes("WebSearch") && !codexWeb) return;
+  const query = codexWeb ? codexWebQueryText(input) : String(input.query ?? input.url ?? input.prompt ?? "");
   const dir = join(claudeHome(home), "logs", "00-changelog");
   try {
     mkdirSync(dir, { recursive: true });
