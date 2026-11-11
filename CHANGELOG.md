@@ -4,6 +4,17 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.117] - 2026-11-11
+
+### Changed
+
+- **license: copyright holder is now Fusengine Sàrl** (`LICENSE`) — LICENSE copyright holder is now Fusengine Sàrl.
+
+### Fixed
+
+- **tracking: track lock fairness** (`src/tracking/track-lock-sync.ts`) — a process that saw contention steps aside 1-4 ms after release so waiters can acquire (mitigates the 'Motion budget lock busy' starvation seen on the Publish runner). Tests: `track-lock-fairness`.
+- **snapshot: configurable git timeout** (`src/runtime/lifecycle/snapshot/git.ts`) — snapshot git timeout is configurable via `FUSE_SNAPSHOT_GIT_TIMEOUT_MS` (default 150 ms unchanged); tests no longer depend on runner latency for the Git section. Tests: `snapshot`.
+
 ## [0.1.116] - 2026-11-10
 
 ### Fixed

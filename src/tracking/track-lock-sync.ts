@@ -54,6 +54,26 @@ export function withTrackLockSync<T>(dir: string, fn: () => T): T | typeof LOCK_
   }
 }
 
+/** How long after its own last failed attempt a process still counts the lock as contended. */
+const CONTENDED_WINDOW_MS = 100;
+/** Upper bound (4 ms) of the post-release step-aside: of the same order as the 1-8 ms waiter backoff, so at least some waiter polls inside it. */
+const STEP_ASIDE_MAX_MS = 4;
+/** Per-process: lockfile path -> `performance.now()` of this process's last failed attempt on it. */
+const lastContended = new Map<string, number>();
+
+/**
+ * Fairness: a bare `wx` lock lets the releasing process re-take a free lock
+ * microseconds later, before any sleeping waiter polls, so under N writers one
+ * can starve past its budget. A process that saw contention on `lock` recently
+ * steps aside 1..{@link STEP_ASIDE_MAX_MS} ms after releasing it; uncontended
+ * callers never pay it.
+ */
+function stepAsideIfContended(lock: string): void {
+  const at = lastContended.get(lock);
+  if (at === undefined || performance.now() - at > CONTENDED_WINDOW_MS) return;
+  sleepSync(1 + Math.floor(Math.random() * STEP_ASIDE_MAX_MS));
+}
+
 /**
  * Blocking twin of {@link withTrackLockSync}: waits out an in-flight
  * compaction (same `track.lock`) so an append never races its
@@ -84,6 +104,7 @@ export function withTrackLockSyncBlocking<T>(
       break;
     } catch {
       if (isStale(lock)) { try { unlinkSync(lock); } catch { /* raced */ } }
+      lastContended.set(lock, performance.now());
       const left = deadline - performance.now();
       if (left <= 0) return LOCK_FAILED;
       const step = Math.min(1 << Math.min(attempt, 3), 8); // 1,2,4,8,8… ms
@@ -94,6 +115,7 @@ export function withTrackLockSyncBlocking<T>(
     return fn();
   } finally {
     try { unlinkSync(lock); } catch { /* best-effort release */ }
+    stepAsideIfContended(lock);
   }
 }
 

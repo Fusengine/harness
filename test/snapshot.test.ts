@@ -1,15 +1,22 @@
-import { test, expect } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { collectGit } from "../src/runtime/lifecycle/snapshot/git";
+import { collectGit, GIT_TIMEOUT_ENV } from "../src/runtime/lifecycle/snapshot/git";
 import { collectVersion } from "../src/runtime/lifecycle/snapshot/version";
 import { collectBoard } from "../src/runtime/lifecycle/snapshot/board";
 import { renderSections, attachSnapshot } from "../src/runtime/lifecycle/snapshot/format";
 import { renderSnapshot, withSnapshot } from "../src/runtime/lifecycle/snapshot/index";
 
 const tmp = (p: string): string => mkdtempSync(join(tmpdir(), p));
+
+// These tests assert git CONTENT, not latency: the production 150 ms per-git-call
+// timeout silently omits the section on a loaded runner (Publish flake), so pin a
+// generous one here. The default stays untouched in production code.
+let prevGitTimeout: string | undefined;
+beforeAll(() => { prevGitTimeout = process.env[GIT_TIMEOUT_ENV]; process.env[GIT_TIMEOUT_ENV] = "10000"; });
+afterAll(() => { if (prevGitTimeout === undefined) delete process.env[GIT_TIMEOUT_ENV]; else process.env[GIT_TIMEOUT_ENV] = prevGitTimeout; });
 
 /** A committed git repo with one staged + one untracked file. */
 function repo(): string {
@@ -30,6 +37,27 @@ test("collectGit: branch, recent commit, WIP counts", () => {
   expect(out).toContain("init");
   expect(out).toContain("1 staged");
   expect(out).toContain("1 untracked");
+});
+
+test("fail-open: a git slower than the DEFAULT 150 ms budget omits the Git section and never throws", () => {
+  // execSync resolves the bare `git` through process.env.PATH (Node docs: child_process), so a
+  // fake `git` that sleeps 1 s is deterministic: it always exceeds the default budget.
+  const bin = tmp("fh-snap-fakegit-");
+  writeFileSync(join(bin, "git"), "#!/bin/sh\nexec sleep 1\n");
+  chmodSync(join(bin, "git"), 0o755);
+  const dir = repo(); // built with the real git, before PATH is swapped
+  const prevPath = process.env.PATH;
+  delete process.env[GIT_TIMEOUT_ENV]; // default 150 ms
+  process.env.PATH = `${bin}:${prevPath ?? ""}`;
+  try {
+    expect(collectGit(dir)).toBe("");
+    const out = renderSnapshot(dir, import.meta.url);
+    expect(out).not.toContain("### Git");
+    expect(out).toContain("### Version"); // the other sections still render
+  } finally {
+    process.env.PATH = prevPath;
+    process.env[GIT_TIMEOUT_ENV] = "10000";
+  }
 });
 
 test("collectGit: non-repo omits the section", () => {
