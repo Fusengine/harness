@@ -13,7 +13,7 @@ export {
  *  and `dart`, for parity with the extension list in file-size-scope.ts.
  *  Matched case-insensitively by every consumer below (`i` flag) — parity
  *  {@link CODE_FILE_LITERAL}'s own bypass #7 closure. */
-const CODE_EXT = "ts|tsx|mts|cts|js|jsx|mjs|cjs|py|go|rb|rs|java|kt|php|swift|dart|vue|svelte|astro|css|c|cpp|h";
+export const CODE_EXT = "ts|tsx|mts|cts|js|jsx|mjs|cjs|py|go|rb|rs|java|kt|php|swift|dart|vue|svelte|astro|css|c|cpp|h";
 
 /** Redirect (`>`/`>>`) targeting a code-file extension. Case-insensitive
  *  (bypass #9 closure, 2026-09-05 challenger), for parity with

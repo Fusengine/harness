@@ -1,5 +1,7 @@
 import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
+import { cpMoveCommands } from "./bash-write-cpmv";
+import { askFileWrite, blockCodeWrite, strictest } from "./bash-write-prompts";
 import { hasSafeWriteTarget, isSafeCommandTarget, isSafeWritePath } from "./bash-write-safe-paths";
 import { shellFileWriteRedirects } from "./bash-write-redirects";
 import { literalWriteBlock } from "./bash-write-literal";
@@ -13,13 +15,6 @@ import {
 } from "./bash-write-patterns";
 
 export { ASK_WRITERS, CODE_MUTATORS, CODE_REDIRECT, FILE_REDIRECT, SAFE_PREFIXES, SESSION_STATE_FRAGMENT } from "./bash-write-patterns";
-
-function blockCodeWrite(reason: string): Prompt {
-  return { kind: "block", title: "Bash write to code file", reason, actions: ["Use the Write/Edit tool instead"] };
-}
-function askFileWrite(reason: string, ruleId = "bash-write:file-write"): Prompt {
-  return { kind: "ask", ruleId, title: "Bash file write", reason, actions: ["Use the Write/Edit tool instead"] };
-}
 
 /**
  * Shared block/ask/allow verdict for an inline-script write-API match, used by
@@ -38,6 +33,17 @@ function inlineScriptVerdict(cmd: string, label: string): Prompt | null {
   }
   if (hasSafeWriteTarget(cmd)) return null;
   return askFileWrite(`${label} write operation detected. Authorize?`);
+}
+
+/**
+ * The Bash-write verdict: {@link baseBashWriteGuard} (the aa1d13c verdict, every rule above, unchanged) made
+ * only STRICTER by the cp/mv/install/ln proof (bash-write-cpmv.ts), which can only return a block for a PROVEN
+ * foreign-content write into a project code file. Combined in this one place (`strictest`), the result is never
+ * weaker than the base verdict.
+ */
+export function bashWriteGuard(ctx: GuardContext): Prompt | null {
+  if (ctx.tool !== "Bash" || !ctx.command) return null;
+  return strictest(baseBashWriteGuard(ctx), cpMoveCommands(ctx.command, ctx.cwd, ctx.scratchpadDir));
 }
 
 /**
@@ -76,7 +82,7 @@ function inlineScriptVerdict(cmd: string, label: string): Prompt | null {
  * DATA, never a real command position — those leaked into the anchors the
  * same way a quoted mention did.
  */
-export function bashWriteGuard(ctx: GuardContext): Prompt | null {
+export function baseBashWriteGuard(ctx: GuardContext): Prompt | null {
   if (ctx.tool !== "Bash" || !ctx.command) return null;
   const cmd: string = ctx.command;
   const stripped = cmd.trim();
