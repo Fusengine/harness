@@ -20,15 +20,38 @@ function afterCd(segment: string, dir: string): string {
   return existsSync(next) && statSync(next).isDirectory() ? next : dir;
 }
 
+/** `-c alias.<sub>=commit…` (or `!…commit…`) in the git global options: the subcommand really runs a commit. */
+function aliasesCommit(tokens: string[], sub: string): boolean {
+  const head = `alias.${sub}=`;
+  // Tokens keep their quotes (`alias.ci='commit` `-a'`): drop them, the value then starts right after `=`.
+  return tokens.some((t, i) => {
+    const bare = t.replace(/['"]/g, "");
+    return tokens[i - 1] === "-c" && bare.startsWith(head) && /^!?(git\s+)?commit(\s|$)/.test(bare.slice(head.length));
+  });
+}
+
+/** Literal `--work-tree <p>` / `--work-tree=<p>` global option: the working tree the commit lands in. */
+function workTreeOf(tokens: string[]): string | null {
+  for (const [i, t] of tokens.entries()) {
+    if (t === "commit") return null;
+    if (t.startsWith("--work-tree=")) return t.slice("--work-tree=".length) || null;
+    if (t === "--work-tree") return tokens[i + 1] ?? null;
+  }
+  return null;
+}
+
 function scan(command: string, startDir: string, depth: number): string | null {
   let dir = startDir;
   for (const raw of shellSegments(command)) {
     const segment = unwrap(raw);
     const git = gitSubcommand(segment);
     if (git) {
-      if (git.sub !== "commit") continue;
+      const tokens = commandTokens(segment);
+      if (git.sub !== "commit" && !aliasesCommit(tokens, git.sub)) continue;
       let where = dir;
       for (const c of git.dirs) where = resolve(where, c);
+      const wt = workTreeOf(tokens);
+      if (wt && !/[$`~*?]/.test(wt)) where = resolve(where, wt);
       return existsSync(where) ? where : dir;
     }
     const verb = basename(commandTokens(segment)[0] ?? "");
@@ -52,5 +75,6 @@ function scan(command: string, startDir: string, depth: number): string | null {
  */
 export function gitCommitDir(command: string, cwd: string): string | null {
   // Heredoc bodies are data (a doc that mentions `git commit`), never commands.
-  return scan(stripDataHeredocs(command), cwd, 0);
+  // A backslash-newline is a line continuation: the shell joins `git \<nl>commit` into `git commit`.
+  return scan(stripDataHeredocs(command).replace(/\\\r?\n/g, ""), cwd, 0);
 }

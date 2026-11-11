@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, join } from "node:path";
 import type { Prompt } from "../prompt/types";
 import { gitCommitDir } from "./git-commit-command";
 
@@ -54,29 +54,67 @@ function collect(exec: Exec, cwd: string): LintOutcome {
   return o;
 }
 
-/** Nearest ancestor of `dir` (itself included) holding a project manifest, so a commit from a subdirectory lints its project. */
-function projectRoot(dir: string): string | null {
-  for (let d = dir; ; d = dirname(d)) {
-    if (["package.json", "requirements.txt", "pyproject.toml"].some((f) => existsSync(join(d, f)))) return d;
-    // Never climb past the repository top: a manifest above the repo is not this commit's project.
-    if (existsSync(join(d, ".git")) || dirname(d) === d) return null;
+/** The host payload cwd when usable (absolute and existing); a relative/missing one yields undefined so the caller falls back to the hook process cwd instead of silently disabling the gate. */
+export function usableCwd(payloadCwd: string | undefined): string | undefined {
+  return payloadCwd && isAbsolute(payloadCwd) && existsSync(payloadCwd) ? payloadCwd : undefined;
+}
+
+/** `git rev-parse --show-toplevel` of `dir`: a linked worktree has its OWN toplevel (never the main checkout). Null outside a repo. */
+function toplevel(dir: string): string | null {
+  try {
+    const out = execFileSync("git", ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "rev-parse", "--show-toplevel"], { cwd: dir, timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    return out || null;
+  } catch {
+    return null;
   }
 }
 
-/** Legacy trigger kept as a superset so no previously gated command is dropped. */
-const legacyCommit = (c: string): boolean => c.startsWith("git") && c.includes("commit");
+const MANIFESTS: readonly string[] = ["package.json", "requirements.txt", "pyproject.toml"];
+const hasManifest = (d: string): boolean => MANIFESTS.some((f) => existsSync(join(d, f)));
+
+/**
+ * Nearest ancestor of `dir` (itself included) holding a project manifest, so a commit from a subdirectory lints its project.
+ * The climb is physical (realpath) and stops at the commit's own working-tree top (`git rev-parse --show-toplevel`); outside any
+ * repository there is no climb at all (a stray ancestor manifest, e.g. `~/package.json`, is never a commit's project).
+ */
+function projectRoot(dir: string): string | null {
+  let real = dir;
+  try { real = realpathSync(dir); } catch { /* keep the logical path */ }
+  const top = toplevel(real);
+  if (top === null) return hasManifest(real) ? real : null;
+  for (let d = real; ; d = dirname(d)) {
+    if (hasManifest(d)) return d;
+    if (d === top || dirname(d) === d) return null;
+  }
+}
 
 /**
  * Gate a `git commit` on linters (effectful: runs eslint/tsc/prettier/ruff, never auto-fixes).
- * Fires for the commit behind `cd x &&`, git global options, env prefixes, wrappers and subshells.
+ * Fires ONLY for a real `git commit` subcommand (behind `cd x &&`, git global options, env prefixes, wrappers, subshells)
+ * and lints the working tree that commit lands in (a linked worktree's own toplevel, never the main checkout).
  * Lint failure -> `block`; a linter that could not run -> `inform` warning (fail-open, visible).
+ * @param cwd - The session's working directory (the hook payload cwd; the hook process cwd only as a fallback).
  * @param exec - Process runner (tests inject failures).
  */
 export function preCommitGate(tool: string, command: string | undefined, cwd: string | undefined, exec: Exec = execFileSync): Prompt | null {
   if (tool !== "Bash" || !command || !cwd) return null;
-  const dir = gitCommitDir(command, cwd) ?? (legacyCommit(command) ? cwd : null);
+  // Trigger = main's legacy substring test UNION the parsed (wrapped) commits: new ⊇ old by construction, so no commit main linted is ever
+  // missed. Known, documented false trigger kept on purpose (owner decision pending): read-only git that merely contains "commit"
+  // (`git log --grep=commit`). The parser only decides WHICH directory is linted.
+  const legacy = command.startsWith("git") && command.includes("commit");
+  const dir = gitCommitDir(command, cwd) ?? (legacy ? cwd : null);
   if (!dir) return null;
-  const { errors, skipped } = collect(exec, projectRoot(dir) ?? cwd);
+  // Lint roots = the commit's own project (parsed dir: worktree toplevel, `cd x`, `-C`, `--work-tree`) UNION the session cwd's project, which is
+  // what main always linted. The union (never a replacement) is what makes "everything main linted is still linted" hold even when the parsed
+  // dir has a manifest with nothing to lint (`git -C sub commit`) or resolves outside the repo (`--work-tree=/tmp`).
+  const roots = [...new Set([projectRoot(dir), projectRoot(cwd) ?? cwd].filter((r): r is string => r !== null))];
+  const errors: string[] = [];
+  const skipped: string[] = [];
+  for (const root of roots) {
+    const out = collect(exec, root);
+    errors.push(...out.errors);
+    skipped.push(...out.skipped);
+  }
   const warn = skipped.length ? `Pre-commit check skipped: ${skipped.join("; ")}.` : "";
   if (errors.length) {
     return {

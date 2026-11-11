@@ -4,7 +4,7 @@ import { existingLineCounts, isApexScoped } from "./gate-helpers";
 import { FAIL_CLOSED } from "../policy/guards";
 import { loadTrack } from "../tracking/store";
 import { dryGate } from "./dry";
-import { preCommitGate } from "./precommit";
+import { preCommitGate, usableCwd } from "./precommit";
 import { modularGate } from "./modular";
 import { frameworkSkillGate } from "./framework-skill-gate";
 import { reconcileRefReadsFromTranscript } from "../freshness/ref-evidence";
@@ -90,7 +90,7 @@ function promptRank(prompt: Prompt): number {
 export async function runGates(input: GateInput): Promise<Prompt | null> {
   // Pre-commit lint hard-block runs FIRST: evaluate()'s GIT_ASK branch would
   // otherwise short-circuit a `git commit` before the linters get to veto it.
-  const precommit = preCommitGate(input.tool, input.command, input.cwd);
+  const precommit = preCommitGate(input.tool, input.command, usableCwd(input.payloadCwd) ?? input.cwd);
   if (precommit?.kind === "block") return precommit;
   // A skipped-linter warning (`inform`) must not short-circuit the other gates: it only surfaces when they all allow.
   return (await runStatefulGates(input)) ?? precommit;

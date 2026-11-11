@@ -66,6 +66,7 @@ test("git commit behind cd / -C / env / subshell / group / sh -c is gated", () =
 
 test("no false positive: commit text inside quotes / other subcommands", () => {
   for (const c of ["echo 'git commit -m y'", 'echo "cd x && git commit"', "git log --grep=commit", "git status", "ls && echo commit", "git commit-tree HEAD"]) {
+    // Main's substring trigger is kept in full: `git log --grep=commit` / `git commit-tree` still fire (known false trigger, owner decision pending).
     expect([c, blocks(c)]).toEqual([c, c === "git log --grep=commit" || c === "git commit-tree HEAD"]);
   }
 });
