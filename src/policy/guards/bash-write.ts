@@ -2,6 +2,8 @@ import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
 import { hasSafeWriteTarget, isSafeCommandTarget, isSafeWritePath } from "./bash-write-safe-paths";
 import { shellFileWriteRedirects } from "./bash-write-redirects";
+import { literalWriteBlock } from "./bash-write-literal";
+import { commandOutputOnlyInTemp } from "./bash-write-output-window";
 import { redirectsOnlyInScratchpad } from "./bash-write-scratchpad";
 import { unquotedShellText } from "./bash-write-unquoted";
 import {
@@ -126,8 +128,10 @@ export function bashWriteGuard(ctx: GuardContext): Prompt | null {
     // Narrow window: every redirect provably lands in the session scratchpad → no ask here; the later
     // stages (inline node/ruby, ASK_WRITERS) still run, so the command is never more permissive than
     // the same command without its redirects.
-    if (!redirectsOnlyInScratchpad(cmd, ctx.scratchpadDir)) {
-      return askFileWrite("Shell redirect to file detected. Authorize?", "bash-write:file-redirect");
+    // Same fall-through for command output (read-only producer) landing strictly in scratchpad / system temp;
+    // literal text written through the shell is refused outright (Write/Edit tool), anything else keeps the ask.
+    if (!redirectsOnlyInScratchpad(cmd, ctx.scratchpadDir) && !commandOutputOnlyInTemp(cmd, ctx.scratchpadDir)) {
+      return literalWriteBlock(cmd, ctx.cwd) ?? askFileWrite("Shell redirect to file detected. Authorize?", "bash-write:file-redirect");
     }
   }
 
@@ -149,7 +153,7 @@ export function bashWriteGuard(ctx: GuardContext): Prompt | null {
 
   const asker = ASK_WRITERS.find((a) => a.re.test(cmd));
   if (asker) {
-    return isSafeCommandTarget(cmd) ? null : askFileWrite(`${asker.desc} detected. Authorize?`);
+    return isSafeCommandTarget(cmd) ? null : literalWriteBlock(cmd, ctx.cwd) ?? askFileWrite(`${asker.desc} detected. Authorize?`);
   }
   return null;
 }

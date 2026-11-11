@@ -12,6 +12,8 @@ export interface GateInput {
   cwd?: string;
   /** Claude Code `scratchpad_dir` (runtime/normalize.ts) — threaded to evaluate() for the Bash redirect window only. */
   scratchpadDir?: string;
+  /** Host payload `cwd` (runtime/normalize.ts) — NOT the hook process cwd above; threaded to evaluate() for the Bash literal-write block only. */
+  payloadCwd?: string;
   refs?: RefMeta[];
   /** Lazy refs source (handle-pre.ts): consulted by the APEX-scoped gate only when `refs` is absent, so Bash/Read/trivial edits never pay the refs scan. */
   loadRefs?: RefsThunk;

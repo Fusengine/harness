@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import { bashWriteGuard } from "../src/policy/guards/bash-write";
 import type { GuardContext } from "../src/policy/guards/context";
+import { REAL_CWD } from "./helpers/real-cwd";
 
 test("blocks sed -i on a code file", () => {
   const ctx: GuardContext = { tool: "Bash", command: "sed -i 's/foo/bar/' src/index.ts" };
@@ -16,8 +17,10 @@ test("python3 -c: read-only script passes, a mutating one blocks", () => {
   expect(bashWriteGuard({ tool: "Bash", command: "python3 -c \"import os; os.remove('a.ts')\"" })?.kind).toBe("block");
 });
 
-test("asks before redirect to a non-code file", () => {
-  expect(bashWriteGuard({ tool: "Bash", command: "echo log >> out.txt" })?.kind).toBe("ask");
+test("asks before redirect to a non-code file (command output); literal text blocks", () => {
+  expect(bashWriteGuard({ tool: "Bash", command: "prog >> out.txt" })?.kind).toBe("ask");
+  expect(bashWriteGuard({ tool: "Bash", command: "echo log >> out.txt", cwd: REAL_CWD })?.kind).toBe("block");
+  expect(bashWriteGuard({ tool: "Bash", command: "echo log >> out.txt" })?.kind).toBe("ask"); // no payload cwd: cannot prove the target
 });
 
 test("quoted and escaped greater-than characters are not shell redirects", () => {

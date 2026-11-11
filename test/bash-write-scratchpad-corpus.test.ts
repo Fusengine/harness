@@ -3,7 +3,7 @@ import { bashWriteGuard } from "../src/policy/guards/bash-write";
 import { ROWS_A } from "./helpers/redir-corpus-a";
 import { ROWS_B } from "./helpers/redir-corpus-b";
 import { ROWS_C } from "./helpers/redir-corpus-c";
-import { D, expand } from "./helpers/redir-corpus";
+import { D, askNow, expand, nowOf } from "./helpers/redir-corpus";
 
 const ROWS = [...ROWS_A, ...ROWS_B, ...ROWS_C];
 
@@ -19,18 +19,18 @@ describe("redirect-narrowing corpus (frozen old verdicts from main)", () => {
   });
 
   test("without scratchpad_dir every row keeps its old verdict", () => {
-    for (const row of ROWS) expect(verdict(row.cmd, undefined), row.id).toBe(row.old);
+    for (const row of ROWS) expect(verdict(row.cmd, undefined), row.id).toBe(nowOf(expand(row.cmd), row.old));
   });
 
   test("with scratchpad_dir: safe rows become allow, every other row keeps its old verdict", () => {
-    for (const row of ROWS) expect(verdict(row.cmd, D), row.id).toBe(row.safe ? "allow" : row.old);
+    for (const row of ROWS) expect(verdict(row.cmd, D), row.id).toBe(row.safe ? "allow" : nowOf(expand(row.cmd), row.old));
   });
 
   test("no block is ever relaxed and no ask outside the safe rows becomes allow", () => {
     for (const row of ROWS) {
       const now = verdict(row.cmd, D);
       if (row.old === "block") expect(now, row.id).toBe("block");
-      if (row.old === "ask" && !row.safe) expect(now, row.id).toBe("ask");
+      if (row.old === "ask" && !row.safe) expect(now, row.id).toBe(askNow(expand(row.cmd)));
     }
   });
 });

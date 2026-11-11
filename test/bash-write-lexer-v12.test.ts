@@ -3,6 +3,7 @@ import { bashWriteGuard } from "../src/policy/guards/bash-write";
 import { anchorText } from "../src/policy/guards/bash-write-lexer";
 import { unquotedShellText } from "../src/policy/guards/bash-write-unquoted";
 import type { GuardContext } from "../src/policy/guards/context";
+import { REAL_CWD } from "./helpers/real-cwd";
 
 /**
  * v12 coverage for three challenger-found defects in {@link anchorText}
@@ -20,7 +21,7 @@ import type { GuardContext } from "../src/policy/guards/context";
  *    letting a body line shaped like `<<Z` open a FAKE heredoc that erased
  *    a later real write between it and a coincidentally matching `Z` line.
  */
-const cmd = (command: string): GuardContext => ({ tool: "Bash", command });
+const cmd = (command: string): GuardContext => ({ tool: "Bash", command, cwd: REAL_CWD });
 type Verdict = "block" | "ask" | null;
 const verdict = (command: string): Verdict => (bashWriteGuard(cmd(command))?.kind as Verdict) ?? null;
 const reason = (command: string): string | undefined => bashWriteGuard(cmd(command))?.reason;
@@ -75,7 +76,8 @@ const PARITY: readonly (readonly [string, string, Verdict])[] = [
   ["d_embedded_quote_delim_data", `cat <<E"O"F\nplan; ruby -e File.write src/x.ts\nEOF`, null],
   ["d_commit_F_short", "git commit -F- <<'EOF'\nfix; ruby -e File.write src/x.ts\nEOF", null],
   ["w_git_status", "git status", null],
-  ["w_redirect_log", "echo 1 >> out.log", "ask"],
+  ["w_redirect_log", "echo 1 >> out.log", "block"], // literal text: Write/Edit tool instead (was ask on main)
+  ["w_redirect_prog", "prog >> out.log", "ask"],
 ];
 
 test("(d/w) main-parity fixtures match the hardcoded owner-measured verdict", () => {

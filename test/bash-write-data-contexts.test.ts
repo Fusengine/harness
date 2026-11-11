@@ -2,6 +2,7 @@ import { test, expect } from "bun:test";
 import { bashWriteGuard } from "../src/policy/guards/bash-write";
 import { unquotedShellText } from "../src/policy/guards/bash-write-unquoted";
 import type { GuardContext } from "../src/policy/guards/context";
+import { REAL_CWD } from "./helpers/real-cwd";
 
 /**
  * Owner-measured parity gap (2026-09-05, main vs working tree): the
@@ -14,7 +15,7 @@ import type { GuardContext } from "../src/policy/guards/context";
  * which additionally blanks heredoc bodies and comments before the anchors
  * ever see the text. `null` below means "no Prompt returned" (allow).
  */
-const cmd = (command: string): GuardContext => ({ tool: "Bash", command });
+const cmd = (command: string): GuardContext => ({ tool: "Bash", command, cwd: REAL_CWD });
 type Verdict = "block" | "ask" | null;
 const verdict = (command: string): Verdict => (bashWriteGuard(cmd(command))?.kind as Verdict) ?? null;
 
@@ -116,8 +117,9 @@ test("(d) bun test still allows", () => {
   expect(verdict("bun test")).toBeNull();
 });
 
-test("(d) append redirect to a non-code file still asks", () => {
-  expect(verdict("echo 1 >> out.log")).toBe("ask");
+test("(d) literal append redirect to a non-code file blocks (was ask: Write/Edit tool instead)", () => {
+  expect(verdict("echo 1 >> out.log")).toBe("block");
+  expect(verdict("prog >> out.log")).toBe("ask");
 });
 
 test("(d) redirect to a code file still blocks", () => {

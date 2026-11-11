@@ -2,6 +2,7 @@ import { test, expect } from "bun:test";
 import { bashWriteGuard } from "../src/policy/guards/bash-write";
 import { RUBY_E_ANCHOR } from "../src/policy/guards/bash-write-patterns";
 import type { GuardContext } from "../src/policy/guards/context";
+import { REAL_CWD } from "./helpers/real-cwd";
 
 /**
  * Frozen main-parity table for bashWriteGuard's ruby/node inline-script
@@ -21,7 +22,7 @@ import type { GuardContext } from "../src/policy/guards/context";
  *
  * `null` below means "no Prompt returned" (allow).
  */
-const cmd = (command: string): GuardContext => ({ tool: "Bash", command });
+const cmd = (command: string): GuardContext => ({ tool: "Bash", command, cwd: REAL_CWD });
 type Verdict = "block" | "ask" | null;
 const verdict = (command: string): Verdict => (bashWriteGuard(cmd(command))?.kind as Verdict) ?? null;
 
@@ -120,7 +121,8 @@ const PARITY_TABLE: readonly (readonly [string, Verdict])[] = [
   // Ask (non-code file writers)
   [`tee out.txt`, "ask"],
   [`dd if=/dev/zero of=out.txt`, "ask"],
-  [`echo 1 >> out.log`, "ask"],
+  [`echo 1 >> out.log`, "block"], // literal text: Write/Edit tool instead (was ask on main)
+  [`prog >> out.log`, "ask"],
   [`bun -e 'require("fs").writeFileSync("out.json","1")'`, "ask"],
   // Null (safe/read-only)
   [`bun test`, null],

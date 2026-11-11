@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { bashWriteGuard } from "../src/policy/guards/bash-write";
 import { shellFileWriteRedirects, shellOutputRedirects } from "../src/policy/guards/bash-write-redirects";
 import { SAFE_WRITE_PATHS } from "../src/policy/guards/bash-write-safe-paths";
+import { REAL_CWD } from "./helpers/real-cwd";
 
-const verdict = (command: string): string => bashWriteGuard({ tool: "Bash", command })?.kind ?? "allow";
+const verdict = (command: string): string => bashWriteGuard({ tool: "Bash", command, cwd: REAL_CWD })?.kind ?? "allow";
 
 /** Every command must get the same verdict as its plain `>` twin. */
 const FILE_FORMS = [
@@ -15,7 +16,8 @@ const FILE_FORMS = [
 ];
 
 test("ampersand and fd-prefixed file redirects ask like a plain `>` on a non-code target", () => {
-  for (const form of FILE_FORMS) expect([form, verdict(form.replace("{f}", "out.txt"))]).toEqual([form, "ask"]);
+  // `prog` = command output: it keeps the ask. A fully literal `echo` is refused instead (bash-write-literal-block.test.ts).
+  for (const form of FILE_FORMS) expect([form, verdict(form.replace("{f}", "out.txt").replace(/^echo x/, "prog x"))]).toEqual([form, "ask"]);
 });
 
 test("ampersand and fd-prefixed file redirects block on a code-file target", () => {
@@ -26,13 +28,14 @@ test("ampersand and fd-prefixed file redirects block on a code-file target", () 
 });
 
 test("a file named like a descriptor is still a file for &> (bash writes ./2)", () => {
-  expect(verdict("echo x &> 2")).toBe("ask");
-  expect(verdict("echo x &>2")).toBe("ask");
+  expect(verdict("prog x &> 2")).toBe("ask");
+  expect(verdict("echo x &> 2")).toBe("block"); // literal text: Write/Edit tool instead
+  expect(verdict("echo x &>2")).toBe("block");
   expect(verdict("echo x >&2-")).toBe("ask"); // zsh writes a file named `2-`
 });
 
 test("only plain `>&` / `N>&` duplicates; `>>&`, `>&|`, `>&!` always open the named file (zsh)", () => {
-  for (const c of ["echo x >>&2", "echo x 2>>&1", "echo x >&|2", "echo x >&!2", "echo x >>&|2", "echo x >&!-", "echo x >>&-", "echo x >|&2"]) {
+  for (const c of ["prog x >>&2", "prog x 2>>&1", "prog x >&|2", "prog x >&!2", "prog x >>&|2", "prog x >&!-", "prog x >>&-", "prog x >|&2"]) {
     expect([c, verdict(c)]).toEqual([c, verdict(c.replace(/>+\|?&[|!]?/, "> "))]);
     expect([c, verdict(c)]).toEqual([c, "ask"]);
   }
@@ -82,10 +85,10 @@ test("redirects nested in substitutions are visible for the ampersand forms", ()
 test("SAFE_WRITE_PATHS behaves exactly as for `>`", () => {
   const safe = join(SAFE_WRITE_PATHS[0] ?? "", "x.log");
   for (const op of [">", "&>", "&>>", ">&", ">>&", "2>>", "1>&"]) {
-    expect([op, verdict(`echo x ${op} ${safe}`)]).toEqual([op, verdict(`echo x > ${safe}`)]);
+    expect([op, verdict(`prog x ${op} ${safe}`)]).toEqual([op, verdict(`prog x > ${safe}`)]);
   }
   expect(verdict(`echo x &> ${safe}`)).toBe("allow");
-  expect(verdict(`echo x &> ${safe} && echo y &> out.txt`)).toBe("ask");
+  expect(verdict(`echo x &> ${safe} && prog y &> out.txt`)).toBe("ask");
 });
 
 test("the SAFE_PREFIXES short-circuit no longer hides an ampersand redirect", () => {

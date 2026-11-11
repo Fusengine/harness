@@ -1,4 +1,48 @@
-import { lstatSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
+
+/** A system temp dir a redirect may target: the spellings accepted in a command and the physical directory behind them. */
+export interface TempRoot {
+  names: readonly string[];
+  physical: string;
+}
+
+/** macOS per-user temp dir as `$TMPDIR` spells it (no dot-only segment, with or without the `/private` prefix). */
+const USER_TMP = /^(?:\/private)?\/var\/folders\/(?!\.+\/)[A-Za-z0-9_.-]+\/(?!\.+\/)[A-Za-z0-9_.-]+\/T$/;
+
+/** Resolve one temp root; null when absent or not a real directory. */
+function resolveRoot(names: readonly string[]): TempRoot | null {
+  const physicalOf = (path: string): string | null => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return null;
+    }
+  };
+  const physical = physicalOf(names[0] ?? "");
+  if (physical === null || !lstatSync(physical).isDirectory()) return null;
+  return { names: names.filter((n) => physicalOf(n) === physical), physical };
+}
+
+/**
+ * System temp roots for the command-output window: `/tmp` (and `/private/tmp`
+ * where that is its physical location) plus the per-user `$TMPDIR` when it
+ * is a macOS `/var/folders/x/y/T` dir. Files are only ever matched as direct
+ * children, so no sub-directory, `..` or symlinked name is reachable.
+ * @param tmpdir - `$TMPDIR` value (injectable for tests).
+ * @returns The roots that exist as real directories.
+ */
+export function tempRoots(tmpdir: string | undefined = process.env.TMPDIR): TempRoot[] {
+  const out: TempRoot[] = [];
+  const fixed = resolveRoot(["/tmp", "/private/tmp"]);
+  if (fixed) out.push(fixed);
+  const user = tmpdir?.replace(/\/$/, "");
+  if (user !== undefined && USER_TMP.test(user)) {
+    const alt = user.startsWith("/private/") ? user.slice("/private".length) : `/private${user}`;
+    const root = resolveRoot([user, alt]);
+    if (root) out.push(root);
+  }
+  return out;
+}
 
 /** Characters an absolute scratchpad dir may contain; deliberately tiny so no expansion, quote, glob, brace or tilde form can occur. */
 const DIR_CHARS = /^\/[A-Za-z0-9_.\-/]+$/;

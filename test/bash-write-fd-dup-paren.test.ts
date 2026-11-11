@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { D, P, expand, guardVerdict as verdict } from "./helpers/redir-corpus";
+import { D, P, expand, guardVerdict as verdict, nowOf } from "./helpers/redir-corpus";
 
 /** Regression: a descriptor dup/close or `/dev/null` target glued to a closing paren (`(cmd 2>&1)`) was read as the file `1)`. */
 
@@ -116,7 +116,7 @@ describe("fd dup/close and /dev/null glued to a closing paren write no file", ()
     for (const cmd of SILENT) expect([cmd, verdict(cmd)]).toEqual([cmd, "allow"]);
   });
   test("every real file write keeps main's verdict", () => {
-    for (const [cmd, v] of FROZEN) expect([cmd, verdict(cmd)]).toEqual([cmd, v]);
+    for (const [cmd, v] of FROZEN) expect([cmd, verdict(cmd)]).toEqual([cmd, nowOf(cmd, v)]);
   });
   test("a glued dup next to a real write gives the paren-free twin's verdict", () => {
     for (const [paren, twin] of TWINS) expect([paren, verdict(paren)]).toEqual([paren, verdict(twin)]);
@@ -127,7 +127,7 @@ describe("fd dup/close and /dev/null glued to a closing paren write no file", ()
       ["echo x > @P/a.txt", "ask"], ["echo x &> @P/a.txt", "ask"], ["(echo x > @D/a.txt)", "ask"], ["(echo x > @D/a.txt 2>&1)", "ask"],
       ["(echo x >&2) > @D/a.txt", "ask"], ["echo x > @D/../a.txt", "ask"], ["(echo x > @P/a.txt)", "ask"],
     ];
-    for (const [cmd, v] of rows) expect([cmd, verdict(expand(cmd), D)]).toEqual([cmd, v]);
+    for (const [cmd, v] of rows) expect([cmd, verdict(expand(cmd), D)]).toEqual([cmd, nowOf(expand(cmd), v)]);
     expect(P).toBe("/Users/me/proj");
   });
 });

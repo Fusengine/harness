@@ -17,15 +17,16 @@ export interface Statement {
 }
 
 /** Commands that cannot create, link or write files by themselves; their output goes only through shell redirects. */
-const READERS = new Set(["cd", "pwd", "echo", "true", "false", "cat", "head", "tail", "wc", "ls", "grep", "sort", "tr", "cut", "basename", "dirname", "which", "stat", "du", "df"]);
+export const READERS: ReadonlySet<string> = new Set(["cd", "pwd", "echo", "true", "false", "cat", "head", "tail", "wc", "ls", "grep", "sort", "tr", "cut", "basename", "dirname", "which", "stat", "du", "df"]);
 /** Arguments that make an otherwise read-only command write a file or run a program. */
-const UNSAFE_ARGS: Readonly<Record<string, RegExp>> = { sort: /^(?:-[A-Za-z0-9]*[oST]|--)/ };
+export const UNSAFE_ARGS:Readonly<Record<string, RegExp>> = { sort: /^(?:-[A-Za-z0-9]*[oST]|--)/ };
 /** Test/lint/build runners already allowed without a redirect (SAFE_PREFIXES); they run arbitrary code, so no redirect may follow them. */
 const RUNNERS: ReadonlyArray<readonly string[]> = [["bun", "test"], ["bun", "run"], ["bunx"], ["npx"], ["npm", "test"], ["npm", "run"], ["tsc"], ["biome"], ["eslint"], ["prettier"], ["ruff"], ["pyright"]];
 /** Fd dup first (`2>&1`), then `N>`, `N>>`, `&>`, `&>>`, `>&file` with their target word. */
-const REDIRECT = /\d*>&(?:\d+|-)|(?:&|\d*)>>?&?[ \t]*[^\s;&|<>)]+/g;
+export const REDIRECT: RegExp = /\d*>&(?:\d+|-)|(?:&|\d*)>>?&?[ \t]*[^\s;&|<>)]+/g;
 const DUP_ONLY = /^\d*>&(?:\d+|-)$/;
-const PLAIN_WORD = /^[A-Za-z0-9_./:=,+%@-]+$/;
+/** A word made only of characters the shell never expands or splits. */
+export const PLAIN_WORD: RegExp = /^[A-Za-z0-9_./:=,+%@-]+$/;
 const ASSIGN = /^[A-Za-z_][A-Za-z0-9_]*\+?=/;
 
 /** True when `words` starts with one of the RUNNERS prefixes. */
