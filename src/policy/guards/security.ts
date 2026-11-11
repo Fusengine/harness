@@ -1,11 +1,23 @@
 import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
 import { isTempOnlyDelete } from "./security-temp-delete";
+import { remoteLocalView } from "../remote-target";
 
 /** Label of the system-directory delete block; the only one the temp-dir narrowing lifts. */
 const SYSTEM_DIR_LABEL = "DANGEROUS PATTERN: recursive delete of a system directory";
 /** Pattern of the system-directory delete block (shared by CRITICAL_PATTERNS and the temp-dir narrowing). */
 const SYSTEM_DIR_RE = /\brm\s+(?:-[a-z]*\s+)*-[a-z]*[rf][a-z]*\s+(?:-[a-z]+\s+)*\/(?:etc|usr|var|bin|sbin|boot|lib)\b/;
+
+/**
+ * Labels that only describe THIS machine (privilege escalation, system-directory delete, /etc write, plain rm, recursive
+ * chown, chmod 777): they give no opinion on a PROVEN-remote ssh payload. Every other label (mkfs, dd, fork bomb, rm -rf /,
+ * remote script piped to a shell, ...) keeps firing on the whole command.
+ */
+const REMOTE_RELAXED: ReadonlySet<string> = new Set([
+  SYSTEM_DIR_LABEL, "PRIVILEGE ESCALATION: sudo", "PRIVILEGE ESCALATION: su", "PRIVILEGE ESCALATION: doas", "PRIVILEGE ESCALATION: passwd",
+  "DANGEROUS PATTERN: recursive chown", "DANGEROUS PATTERN: chmod 777", "DANGEROUS PATTERN: write to /etc",
+  "DELETE: 'rm' permanently deletes - confirmation required",
+]);
 
 /** A pattern paired with the violation label to name in the deny/ask reason. */
 export interface LabeledPattern {
@@ -83,9 +95,15 @@ export function securityGuard(ctx: GuardContext): Prompt | null {
   const lifted: boolean = SYSTEM_DIR_RE.test(cmd) && isTempOnlyDelete(ctx.command);
   const hasTrash: boolean = !lifted && /trash/i.test(cmd);
 
-  const critical: string[] = CRITICAL_PATTERNS.filter(({ re, label }) => re.test(cmd) && !(lifted && label === SYSTEM_DIR_LABEL)).map((p) => p.label);
+  // PROVEN-remote ssh payloads are cut out of the local view: a relaxable rule that fires only on the payload steps aside.
+  // The view is matched raw (never heredoc-stripped): a stray `<<'EOF'` operator left in it could otherwise pair with a later local
+  // line and hide it. Matching more text can only keep more of today's hits, never fewer.
+  const local: string | null = remoteLocalView(ctx.command);
+  const offLocal = ({ re, label }: LabeledPattern): boolean => local !== null && REMOTE_RELAXED.has(label) && !re.test(local);
+
+  const critical: string[] = CRITICAL_PATTERNS.filter((p) => p.re.test(cmd) && !(lifted && p.label === SYSTEM_DIR_LABEL) && !offLocal(p)).map((p) => p.label);
   const ask: string[] = ASK_PATTERNS.filter(
-    ({ re, label }) => re.test(cmd) && !(hasTrash && label.startsWith("DELETE: 'rm'")),
+    (p) => p.re.test(cmd) && !(hasTrash && p.label.startsWith("DELETE: 'rm'")) && !offLocal(p),
   ).map((p) => p.label);
   if (critical.length === 0 && ask.length === 0) return null;
 
