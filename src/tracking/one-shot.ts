@@ -20,6 +20,8 @@ import { denyHash } from "../policy/deny-loop";
 import { projectStateDir } from "../runtime/project-state-dir";
 import { applyAllow, applyDeny, EMPTY, formatSummary, pruneState, type OneShotState } from "./one-shot-store";
 import { burstFirst } from "./one-shot-dedup";
+import { resolveAbandonMs } from "./one-shot-events";
+import { outcomeMeta } from "./one-shot-target";
 import type { Prompt } from "../prompt/types";
 
 /** Sidecar basename under the per-project state dir. */
@@ -34,7 +36,7 @@ export const WINDOW_MS: number = 7 * 24 * 60 * 60 * 1000;
  * sibling plugin hooks of ONE event count once, not once each. Omitted by
  * mono-process callers/tests → un-deduped historical behaviour.
  */
-export interface OneShotOpts { now: number; dir: string; sessionId?: string; }
+export interface OneShotOpts { now: number; dir: string; sessionId?: string; cwd?: string; }
 
 /** Identifying tool input (content-free); `content` only decides gateability. */
 export interface OneShotInput { filePath?: string; content?: string; command?: string; }
@@ -56,7 +58,9 @@ export function loadState(path: string): OneShotState {
  * neither and are skipped. Fails silently — a metric write NEVER affects a decision.
  *
  * The op key is tool-INDEPENDENT (`filePath`/`command` only, constant `"op"` tool):
- * a deny (a `Write`) and its fix (an `Edit`) on the same file must link.
+ * a deny (a `Write`) and its fix (an `Edit`) on the same file must link. A Bash
+ * write deny (key = whole command) is also keyed by the code files it targeted, so
+ * a Write/Edit on one of them credits it ({@link module:one-shot-target}).
  * @param prompt - The gate's outcome (block, allow=null, or ask/inform).
  * @param input - Identifying tool input (content decides gateability only).
  * @param opts - Clock + state dir.
@@ -67,10 +71,11 @@ export function recordOneShot(prompt: Prompt | null, input: OneShotInput, opts: 
     const op = denyHash("op", { filePath: input.filePath, command: input.command });
     if (!burstFirst(op, prompt ? `deny:${prompt.title}` : "allow", opts)) return;
     const path = join(opts.dir, SIDECAR);
-    let s = pruneState(loadState(path), opts.now, WINDOW_MS);
+    const meta = outcomeMeta(prompt, input, opts.cwd, opts.sessionId);
+    let s = pruneState(loadState(path), opts.now, WINDOW_MS, resolveAbandonMs(WINDOW_MS));
     s = prompt
-      ? applyDeny(s, prompt.title, op, opts.now)
-      : applyAllow(s, op, opts.now, input.content != null || input.command != null);
+      ? applyDeny(s, prompt.title, op, opts.now, meta)
+      : applyAllow(s, op, opts.now, input.content != null || input.command != null, meta);
     atomicWrite(path, JSON.stringify(s));
   } catch { /* fail-safe: metrics never change a gate decision */ }
 }

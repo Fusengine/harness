@@ -12,6 +12,7 @@ import { atomicWrite } from "../util/json-io";
 import { pruneState, type OneShotState } from "./one-shot-store";
 import { SIDECAR, WINDOW_MS, loadState, type OneShotOpts } from "./one-shot";
 import { burstFirst } from "./one-shot-dedup";
+import { resolveAbandonMs } from "./one-shot-events";
 
 /**
  * Bump the per-tool failure count. Orthogonal to gates/pending, so it can never
@@ -36,7 +37,7 @@ export function recordFailure(tool: string, opts: OneShotOpts): void {
   try {
     if (!burstFirst(`fail:${tool}`, "failure", opts)) return;
     const path = join(opts.dir, SIDECAR);
-    const next = applyFailure(pruneState(loadState(path), opts.now, WINDOW_MS), tool, opts.now);
+    const next = applyFailure(pruneState(loadState(path), opts.now, WINDOW_MS, resolveAbandonMs(WINDOW_MS)), tool, opts.now);
     atomicWrite(path, JSON.stringify(next));
   } catch { /* fail-safe: metrics never break the hook */ }
 }
