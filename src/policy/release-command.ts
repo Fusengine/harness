@@ -97,6 +97,38 @@ function peel(tokens: string[]): string[] {
   return t;
 }
 
+/** Parsed `git` invocation: the subcommand, its arguments and the `-C` directories (in order). */
+export interface GitParts { sub: string; args: string[]; dirs: string[] }
+
+/** Split peeled git tokens (`git`, global options, subcommand, args). */
+function gitParts(tokens: string[]): GitParts {
+  const rest = tokens.slice(1);
+  const dirs: string[] = [];
+  let i = 0;
+  for (; i < rest.length; i++) {
+    const a = rest[i] ?? "";
+    if (GIT_ARG_OPTS.has(a)) {
+      if (a === "-C" && rest[i + 1] !== undefined) dirs.push(rest[i + 1] ?? "");
+      i++;
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    break;
+  }
+  return { sub: rest[i] ?? "", args: rest.slice(i + 1), dirs };
+}
+
+/**
+ * The git subcommand of one shell segment, behind env prefixes, wrappers and
+ * git global options (`-C x`, `-c k=v`, `--no-pager`); `null` when the
+ * segment's verb is not git. Does not recurse into `sh -c` or substitutions.
+ * @param segment - One already-split shell segment.
+ */
+export function gitSubcommand(segment: string): GitParts | null {
+  const tokens = peel(commandTokens(segment));
+  return basename(tokens[0] ?? "") === "git" ? gitParts(tokens) : null;
+}
+
 /** Classify one already-split segment (recursing into shell payloads / substitutions). */
 function classifySegment(segment: string, depth: number): ReleaseAction | null {
   const raw = commandTokens(segment);
@@ -114,17 +146,10 @@ function classifySegment(segment: string, depth: number): ReleaseAction | null {
     }
     if (words[0] === "pr" && words[1] === "merge") return "merge";
   } else if (verb === "git") {
-    const rest = tokens.slice(1);
-    let i = 0;
-    for (; i < rest.length; i++) {
-      const a = rest[i] ?? "";
-      if (GIT_ARG_OPTS.has(a)) { i++; continue; }
-      if (a.startsWith("-")) continue;
-      break;
-    }
-    if (rest[i] === "commit") return null;
-    if (rest[i] === "tag" && tagCreates(rest.slice(i + 1))) return "tag";
-    if (rest[i] === "tag") return null;
+    const git = gitParts(tokens);
+    if (git.sub === "commit") return null;
+    if (git.sub === "tag" && tagCreates(git.args)) return "tag";
+    if (git.sub === "tag") return null;
   }
   if (depth >= MAX_DEPTH) return null;
   if (SHELLS.has(verb)) {

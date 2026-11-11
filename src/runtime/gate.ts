@@ -91,7 +91,12 @@ export async function runGates(input: GateInput): Promise<Prompt | null> {
   // Pre-commit lint hard-block runs FIRST: evaluate()'s GIT_ASK branch would
   // otherwise short-circuit a `git commit` before the linters get to veto it.
   const precommit = preCommitGate(input.tool, input.command, input.cwd);
-  if (precommit) return precommit;
+  if (precommit?.kind === "block") return precommit;
+  // A skipped-linter warning (`inform`) must not short-circuit the other gates: it only surfaces when they all allow.
+  return (await runStatefulGates(input)) ?? precommit;
+}
+
+async function runStatefulGates(input: GateInput): Promise<Prompt | null> {
   // Hook-managed paths: absolute deny on ALL extensions, BEFORE the code-ext/exempt filters (parity enforce-apex-phases.ts:48-52 — isApexScoped never routes a non-code/exempt path to the guard).
   const protectedDeny = protectedPathGate(input.tool, input.filePath);
   if (protectedDeny) return protectedDeny;

@@ -19,6 +19,7 @@ import { evaluate } from "../policy/evaluate";
 import { confirmGate } from "./confirm/confirm-gate";
 import { cursorParentSessionId } from "./confirm/cursor-subagent-link";
 import { prdPreGate } from "./prd";
+import type { Prompt } from "../prompt/types";
 import { releasePrompt } from "./release-gate/pre";
 import type { HandleOptions, HandleOutcome } from "./handle";
 
@@ -102,9 +103,12 @@ export async function handlePre(ctx: PreContext): Promise<HandleOutcome> {
   // Codex `apply_patch`: normalize.ts fanned the freeform patch into per-file
   // changes. OR their static verdicts — one violating hunk blocks the whole
   // envelope. `event.files` is undefined for every other tool/harness.
+  let patchNote: Prompt | null = null;
   if (event.files && event.files.length > 0) {
     const patchPrompt = applyPatchGate(event.files, opts.cwd);
-    if (patchPrompt) return { stdout: withDenyNotice(id, respond(id, patchPrompt, event.eventName ?? "PreToolUse"), patchPrompt, event.sessionId, dirname(file), opts.now), exit: 0 };
+    // An advisory `inform` must not skip the per-file skill/APEX gates below: it only surfaces when they allow.
+    if (patchPrompt?.kind === "inform") patchNote = patchPrompt;
+    else if (patchPrompt) return { stdout: withDenyNotice(id, respond(id, patchPrompt, event.eventName ?? "PreToolUse"), patchPrompt, event.sessionId, dirname(file), opts.now), exit: 0 };
   }
 
   const gateInput = {
@@ -135,7 +139,8 @@ export async function handlePre(ctx: PreContext): Promise<HandleOutcome> {
     : id === "cursor" && (event.commandCandidates?.length ?? 0) > 1
       ? await gateCommandCandidates(gateInput, event.commandCandidates!)
       : await gate(gateInput);
-  const finalGate = prompt ?? releasePrompt(event, opts);
+  // An advisory `inform` never stands in for the release gate: a release step is judged first.
+  const finalGate = (prompt && prompt.kind !== "inform" ? prompt : null) ?? releasePrompt(event, opts) ?? prompt ?? patchNote;
   if (finalGate) {
     // CONFIRM <code> flow: ONLY changes anything when Codex/Kimi/Cursor are
     // about to downgrade THIS `ask` to a hard deny (confirmGate returns null
