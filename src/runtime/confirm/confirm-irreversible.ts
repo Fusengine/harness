@@ -1,4 +1,5 @@
-import { GIT_BLOCKED, matchPatterns } from "../../policy/patterns";
+import { GIT_BLOCKED, matchGitPatterns } from "../../policy/patterns";
+import { expand } from "../../policy/effective-segments";
 
 /**
  * A single flag token carrying BOTH `r` and `f` in either order (`-rf`,
@@ -28,5 +29,5 @@ function isRmRf(cmd: string): boolean {
  */
 export function isIrreversible(cmd: string | undefined): boolean {
   if (!cmd) return false;
-  return matchPatterns(cmd, GIT_BLOCKED) || isRmRf(cmd);
+  return matchGitPatterns(cmd, GIT_BLOCKED) || isRmRf(cmd) || expand(cmd).items.some((item) => item.verb === "rm" && isRmRf(item.text));
 }
