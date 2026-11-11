@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import type { Prompt } from "../../prompt/types";
 import { installDirsOnly, parseCpArgs } from "./bash-write-cpmv-args";
-import { GLOB, isDir, provenRoot, realish, type CpContext } from "./bash-write-cpmv-paths";
+import { destContext, GLOB, isDir, provenRoot, realish, type CpContext } from "./bash-write-cpmv-paths";
 import { CwdTracker } from "./bash-write-cpmv-scope";
 import { provablyBad, type SrcEnv } from "./bash-write-cpmv-source";
 import { base, peel, plain } from "./bash-write-descend-peel";
@@ -58,7 +58,7 @@ function cpMoveProof(argv: readonly WordTok[], ctx: CpContext): Prompt | null {
   // verified on macOS: `mv`, `ln -s`, `cp -R/-P/-a` carry a link operand as a link; `cp -r`, plain `ln` (hard link), `install` follow it
   const keepsLinks = verb === "mv" || symlink || (verb === "cp" && flags.some((w) => /^-[A-Za-z]*[PRad]/.test(w) || w === "--no-dereference"));
   const env: SrcEnv = {
-    dst, dstAbs, dirDst, ctx: { ...ctx, from }, symlink, deref,
+    dst, dstAbs, dirDst, ctx: { ...destContext(ctx, dstAbs), from }, symlink, deref,
     recursive: verb === "mv" || flags.some((w) => /^-[A-Za-z]*[rRa]/.test(w) || w === "--recursive"),
     linkAsLink: keepsLinks && !deref,
     linkDir: symlink && dstAbs !== null ? (dirDst ? dstAbs : dirname(dstAbs)) : from,
@@ -83,6 +83,7 @@ function markReplace(lead: readonly WordTok[], argv: readonly WordTok[]): WordTo
 /**
  * Finds every cp/mv/install/ln (and `git mv`) in `cmd` — lists, compound bodies, subshells, env/timeout/xargs
  * prefixes — and returns the first PROVEN foreign-content write into a project code file as a block prompt.
+ * Each destination is judged against its own proven root ({@link destContext}), not the payload cwd's.
  * Relative paths resolve against the payload cwd moved only by a `cd` that certainly runs ({@link CwdTracker});
  * `env -C`/`sudo -D`, `pushd`/`popd` and any other `cd` make it unknown, which yields no proof. Never asks.
  * @param cmd - Raw command text.
@@ -95,7 +96,7 @@ export function cpMoveCommands(cmd: string, cwd: string | undefined, scratchpadD
   try {
     const here = cwd ? realish(cwd) : null;
     let cached: string | null | undefined;
-    const ctx: CpContext = { from: null, cwd: here, root: () => (cached === undefined ? (cached = provenRoot(here)) : cached), scratch: scratchpadDir };
+    const ctx: CpContext = { from: null, cwd: here, root: () => (cached === undefined ? (cached = provenRoot(here)) : cached), scratch: scratchpadDir, roots: new Map() };
     const track = new CwdTracker(here);
     const units = scan(cmd);
     for (const [n, u] of units.entries()) {

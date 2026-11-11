@@ -1,7 +1,7 @@
 import { lstatSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { CODE_NAME, GLOB, inProject, isDir, isTemp, outsideProven, type CpContext } from "./bash-write-cpmv-paths";
+import { CODE_NAME, GLOB, inProject, isDir, isTemp, outsideProven, ownRoot, type CpContext } from "./bash-write-cpmv-paths";
 import { scanGlob, scanTree } from "./bash-write-cpmv-tree";
 import type { WordTok } from "./bash-write-descend-types";
 
@@ -21,6 +21,21 @@ export interface SrcEnv {
   recursive: boolean;
   /** A symlink operand is moved/copied as a link, carrying no content (`mv`, `ln -s`, `cp -R/-P/-a`). */
   linkAsLink: boolean;
+}
+
+/**
+ * OWNER DECISION (2026-11-11 21:45, "Oui, permettre"): is a source under ANOTHER proven root (a sibling repo, a
+ * worktree, a linked package outside temp/scratchpad) foreign?
+ * false (decided): no, it keeps the aa1d13c verdict; only temp/scratchpad sources, non-code sources and sources
+ * under no provable root stay foreign. true: refused like any source outside the destination's project.
+ */
+export const OTHER_PROVEN_ROOT_IS_FOREIGN = false;
+
+/** True when source `p` is provably foreign to the destination's project: temp/scratchpad, or outside its proven root (see {@link OTHER_PROVEN_ROOT_IS_FOREIGN}). */
+export function foreignSource(ctx: CpContext, p: string): boolean {
+  if (isTemp(ctx, p)) return true;
+  if (!outsideProven(ctx, p)) return false;
+  return OTHER_PROVEN_ROOT_IS_FOREIGN || ownRoot(ctx, p) === null;
 }
 
 /** A glob whose last literal suffix is a non-code extension (`*.png`, `*.1`) can only match non-code names. */
@@ -48,7 +63,7 @@ export function provablyBad(s: WordTok, e: SrcEnv): boolean {
   const abs = resolve(e.linkDir ?? "/", v.replace(/^~(?=\/|$)/, homedir()));
   if (abs.startsWith("/dev/")) return false; // `cp /dev/null file`: a device, not file content
   const dstCode = CODE_NAME.test(e.dst.value);
-  const foreign = (p: string): boolean => isTemp(e.ctx, p) || outsideProven(e.ctx, p);
+  const foreign = (p: string): boolean => foreignSource(e.ctx, p);
 
   if (e.linkAsLink && !GLOB.test(v) && !/\/\.?$/.test(v)) { // (a trailing `/` or `/.` makes cp follow the link)
     try { if (lstatSync(abs).isSymbolicLink()) return false; } catch { /* missing: judged below */ }

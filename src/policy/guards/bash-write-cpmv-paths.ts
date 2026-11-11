@@ -58,6 +58,8 @@ export interface CpContext {
   cwd: string | null;
   root: () => string | null;
   scratch?: string;
+  /** Proven root per directory, shared by every command of one scan (one `git rev-parse` per directory). */
+  roots?: Map<string, string | null>;
 }
 
 const within = (base: string, p: string): boolean => {
@@ -75,6 +77,31 @@ export function inProject(ctx: CpContext, p: string): boolean {
 export function outsideProven(ctx: CpContext, p: string): boolean {
   const root = ctx.root();
   return root !== null && !within(root, realish(p));
+}
+
+/**
+ * The context to judge ONE destination in: its proven root is that of the nearest existing directory of
+ * `dstAbs` ({@link provenRoot}: hardened git top-level, else nearest manifest), cached per directory. When that
+ * directory has no provable root the payload cwd's root stands, so the verdict is the one the payload cwd gives.
+ * @param ctx - Context of the whole command (its `root()` is the payload cwd's root).
+ * @param dstAbs - Absolute destination path (null: unknown, the context is returned unchanged).
+ */
+export function destContext(ctx: CpContext, dstAbs: string | null): CpContext {
+  const own = dstAbs === null ? null : ownRoot(ctx, dstAbs);
+  return own === null ? ctx : { ...ctx, root: () => own };
+}
+
+/** Proven root of the nearest existing directory of `p` (null: none provable), cached per directory in `ctx.roots`. */
+export function ownRoot(ctx: CpContext, p: string): string | null {
+  let dir = realish(p);
+  while (!isDir(dir)) {
+    const up = dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+  const cache = ctx.roots ?? new Map<string, string | null>();
+  if (!cache.has(dir)) cache.set(dir, provenRoot(dir));
+  return cache.get(dir) ?? null;
 }
 
 /** True when `p` is under a temp or scratchpad directory (and not inside the project itself). */
