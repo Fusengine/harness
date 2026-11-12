@@ -14,7 +14,7 @@ export const SHELLS: ReadonlySet<string> = new Set(["bash", "sh", "zsh", "dash",
 export const APPENDING: ReadonlySet<string> = new Set(["xargs", "parallel"]);
 
 /** How a wrapper's own words are laid out: options that take a value, and positional words before the command. */
-interface WrapperSpec { value: ReadonlySet<string>; positional: number; positionalUnless?: string }
+interface WrapperSpec { value: ReadonlySet<string>; positional: number; positionalUnless?: string; bareDash?: boolean }
 /** Build a {@link WrapperSpec}; `positionalUnless` is the option that replaces the positional words (`taskset -c`). */
 const wrapper = (value: string[], positional = 0, positionalUnless?: string): WrapperSpec => ({ value: new Set(value), positional, positionalUnless });
 /** Prefix commands and exactly the words each consumes; the NEXT word is the command they run (nothing is hunted past it). */
@@ -23,8 +23,8 @@ const WRAPPERS: ReadonlyMap<string, WrapperSpec> = new Map([
   ["time", wrapper(["-f", "-o", "--format", "--output"])], ["nice", wrapper(["-n", "--adjustment"])], ["ionice", wrapper(["-c", "-n", "-p", "-P", "--class", "--classdata", "--ignore"])],
   ["stdbuf", wrapper(["-i", "-o", "-e", "--input", "--output", "--error"])], ["timeout", wrapper(["-s", "-k", "--signal", "--kill-after"], 1)],
   ["sudo", wrapper(["-u", "-g", "-h", "-p", "-C", "-r", "-t", "-T", "-D", "-R", "--user", "--group", "--host", "--prompt", "--chdir", "--role", "--type"])], ["doas", wrapper(["-u", "-C"])],
-  ["env", wrapper(["-u", "-C", "-S", "--unset", "--chdir", "--split-string"])],
-  ["xargs", wrapper(["-n", "-I", "-P", "-L", "-s", "-d", "-E", "-a", "-R", "-S", "--max-args", "--max-procs", "--max-lines", "--max-chars", "--delimiter", "--arg-file", "--replace", "--eof"])],
+  ["env", { ...wrapper(["-u", "-C", "-S", "--unset", "--chdir", "--split-string"]), bareDash: true }],
+  ["xargs", wrapper(["-n", "-I", "-P", "-L", "-s", "-d", "-E", "-a", "-R", "-S", "--max-args", "--max-procs", "--max-lines", "--max-chars", "--delimiter", "--arg-file"])],
   ["parallel", wrapper(["-j", "-n", "-N", "-S", "-a", "--jobs", "--max-args", "--sshlogin", "--arg-file"])], ["chrt", wrapper([], 1)], ["taskset", wrapper(["-c", "--cpu-list"], 1, "-c")],
   ["caffeinate", wrapper(["-t", "-w"])], ["flock", wrapper(["-w", "-E", "--timeout", "--conflict-exit-code"], 1)], ["script", wrapper(["-t"], 1)], ["watch", wrapper(["-n", "--interval"])],
 ]);
@@ -36,6 +36,7 @@ function afterWrapper(spec: WrapperSpec, t: string[]): string[] {
     const a = t[i] ?? "";
     if (a === "--") { i++; break; }
     if (ASSIGNMENT.test(a)) continue;
+    if (a === "-" && spec.bareDash) continue;
     if (!a.startsWith("-") || a.length < 2) break;
     if (spec.positionalUnless && a === spec.positionalUnless) positional = 0;
     if (spec.value.has(a)) i++;

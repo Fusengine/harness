@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { expand } from "../src/policy/effective-segments";
 import { ungroup } from "../src/policy/command-peel";
-import { shellWords, stripComments, substitutions } from "../src/policy/shell-words";
+import { shellWords } from "../src/policy/shell-words";
 
 const texts = (cmd: string): string[] => expand(cmd).items.map((i) => i.text);
 

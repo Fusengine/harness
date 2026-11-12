@@ -2,6 +2,9 @@ import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
 import { isTempOnlyDelete } from "./security-temp-delete";
 import { remoteLocalView } from "../remote-target";
+import { isProvenLocalDest } from "../remote-target-host";
+import { scanShell } from "../remote-target-scan";
+import { parseSsh } from "../remote-target-ssh";
 import { isTrashDelete } from "./security-trash";
 import { RM_ROOT_LABEL, isLiteralOperand, rmOperands, rmTargetsRoot } from "./security-rm-root";
 import { expand } from "../effective-segments";
@@ -84,6 +87,22 @@ function stripHeredoc(cmd: string): string {
 }
 
 /**
+ * Whether `raw` starts with ONE simple `ssh [options] host …` line fed by a heredoc whose literal host is NOT proven local (loopback /
+ * own name or address / a lookup returning a local address; a failed or timed-out lookup is no proof). False when anything is unreadable.
+ * @param raw - Raw Bash command.
+ */
+function sshHeredocToNonLocal(raw: string): boolean {
+  const at = raw.indexOf("<<");
+  if (at < 0) return false;
+  const segs = scanShell(raw.slice(0, at));
+  const seg = segs && segs.length === 1 ? segs[0] : undefined;
+  const first = seg?.words[0];
+  if (!seg || !first || first.dynamic || !/^(?:\/(?:usr\/(?:local\/)?|opt\/homebrew\/)?bin\/)?ssh$/.test(first.text)) return false;
+  const dest = parseSsh(seg.words)?.dest;
+  return dest !== undefined && !dest.dynamic && !isProvenLocalDest(dest.text);
+}
+
+/**
  * Guards against dangerous Bash commands. Parity `security_rules.validate_command`
  * + `security-guard.py`: ACCUMULATE every matched violation, then deny when any
  * critical matched else ask, joining all violation labels in the reason. Every
@@ -110,10 +129,10 @@ export function securityGuard(ctx: GuardContext): Prompt | null {
     return { items, texts, head, raw: src };
   };
   const whole = textsOf(raw, cmd);
-  // A heredoc fed to `ssh` is never proven remote, and its body keeps today's verdict for the relaxable labels (read heredoc-stripped, as on
-  // main); a heredoc fed to a LOCAL shell keeps the stricter body-expanded reading.
-  const sshHeredoc: boolean = /\bssh\b[^\n]*<</.test(raw);
-  const view = local !== null ? textsOf(local, local) : sshHeredoc ? { ...textsOf(cmd, cmd), raw } : whole;
+  // Only a proven-remote payload is relaxed. A heredoc fed to `ssh` whose literal host is NOT proven local keeps the installed verdict
+  // (body read heredoc-stripped: remote configuration is a confirmation at most); any other heredoc (loopback / own / unreadable host)
+  // gets the full body-expanded judgment.
+  const view = local !== null ? textsOf(local, local) : sshHeredocToNonLocal(raw) ? { ...textsOf(cmd, cmd), raw } : whole;
   // The same narrowing applies to a wrapped / quoted `rm` (judged on its canonical text).
   const liftedText = (s: typeof whole, t: string): boolean => SYSTEM_DIR_RE.test(t) && isTempOnlyDelete(t === s.head ? s.raw : t);
   const lifted: boolean = view.texts.some((t) => liftedText(view, t));

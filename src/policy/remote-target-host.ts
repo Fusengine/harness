@@ -74,6 +74,36 @@ function isLocalAddress(a: string): boolean {
 }
 
 /**
+ * Whether a bare host is PROVEN to be this machine (or unreadable, which counts as local): a loopback literal / name, an own name or
+ * address, a wildcard-loopback domain, an /etc/hosts entry pointing at a local address, or a lookup that RETURNS a local address.
+ * A lookup that fails or times out is NOT proof. Composed from the same checks as {@link isProvenRemoteName}.
+ * @param host - Host part only (no `user@`).
+ */
+function isProvenLocalName(host: string): boolean {
+  const h = host.toLowerCase().replace(/\.$/, "");
+  if (!HOST_RE.test(h)) return true;
+  const labels = h.split(".");
+  const first = labels[0] ?? "";
+  const last = labels[labels.length - 1] ?? "";
+  if (LOOPBACK_NAMES.has(h) || first === "localhost" || last === "localhost") return true;
+  if (/^(?:0x[0-9a-f]*|\d+)$/.test(last)) return !isRemoteQuad(h);
+  const own = ownNames();
+  if (own.includes(h) || own.includes(first) || WILDCARD_DNS.some((s) => h === s || h.endsWith(`.${s}`)) || hostsFileLocal(h)) return true;
+  return resolveHost(h)?.some(isLocalAddress) ?? false;
+}
+
+/**
+ * Whether a destination word (`[user@]host`) is PROVEN local (see {@link isProvenLocalName}), also through an ssh_config `HostName`.
+ * @param dest - Decoded destination text.
+ */
+export function isProvenLocalDest(dest: string): boolean {
+  const host = dest.slice(dest.lastIndexOf("@") + 1);
+  if (isProvenLocalName(host)) return true;
+  const target = sshConfigTarget(host).hostName;
+  return target !== undefined && isProvenLocalName(target);
+}
+
+/**
  * Whether a destination word (`[user@]host`) is a PROVEN remote machine: literal, plain, a non-local name
  * (see {@link isProvenRemoteName}) and not redirected by ssh_config to a local or unknown target.
  * @param dest - Decoded destination text.
