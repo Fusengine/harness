@@ -14,7 +14,10 @@
  * step; any create flag (`-a -s -u -m -F -f`) or a positional tag name is.
  * `gh api …/merge` is out of scope (only `gh pr merge` is gated).
  */
+import { basename } from "node:path";
 import { expand } from "./effective-segments";
+import { gitParts, peel, type GitParts } from "./command-peel";
+import { commandTokens } from "./motion/shell-verbs";
 import { baseReleaseAction } from "./release-command-base";
 
 /** The release step a command performs. */
@@ -55,6 +58,17 @@ function tagCreates(args: readonly string[]): boolean {
     positional = true;
   }
   return positional && !list;
+}
+
+/**
+ * The git subcommand of one shell segment, behind env prefixes, wrappers and
+ * git global options (`-C x`, `-c k=v`, `--no-pager`); `null` when the
+ * segment's verb is not git. Does not recurse into `sh -c` or substitutions.
+ * @param segment - One already-split shell segment.
+ */
+export function gitSubcommand(segment: string): GitParts | null {
+  const tokens = peel(commandTokens(segment));
+  return basename(tokens[0] ?? "") === "git" ? gitParts(tokens) : null;
 }
 
 /**

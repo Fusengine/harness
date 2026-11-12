@@ -27,7 +27,13 @@ function moduleOf(path: string): string {
 export interface DuplicationVerdict {
   names: string[];
   duplicates: string[];
+  /** Set when the grep could not complete (timeout / spawn failure): the check was skipped, not clean. */
+  skipped?: string;
 }
+
+/** Grep runner (injectable so timeout / spawn failure are testable deterministically). */
+export type GrepRunner = (args: string[]) => string;
+const runGrep: GrepRunner = (args) => execFileSync("grep", args, { encoding: "utf8", timeout: 1500 });
 
 /**
  * Grep the codebase for existing declarations of the symbols a write introduces,
@@ -35,7 +41,7 @@ export interface DuplicationVerdict {
  * shells out to `grep`. Fails open (returns no duplicates) on any grep error,
  * timeout, or no-match — matching the original Python hook.
  */
-export function detectDuplication(filePath: string, content: string, cwd: string): DuplicationVerdict {
+export function detectDuplication(filePath: string, content: string, cwd: string, run: GrepRunner = runGrep): DuplicationVerdict {
   const ext = extname(filePath).toLowerCase();
   if (!TS_EXT.has(ext) && ext !== ".php") return { names: [], duplicates: [] };
   const names = extractSymbols(content, ext);
@@ -49,9 +55,13 @@ export function detectDuplication(filePath: string, content: string, cwd: string
   let out = "";
   try {
     const args = ["-rEl", ...EXCLUDE_DIRS.map((d) => `--exclude-dir=${d}`), ...include, "--", pattern, cwd];
-    out = execFileSync("grep", args, { encoding: "utf8", timeout: 1500 });
-  } catch {
-    return { names, duplicates: [] };
+    out = run(args);
+  } catch (e: unknown) {
+    const err = e as { status?: number | null; code?: string; stdout?: string | Buffer };
+    // grep exit 1 = no match (clean). Exit 2 = some path unreadable: keep the matches it did print.
+    if (err.status === 1) return { names, duplicates: [] };
+    if (err.status === 2 && err.stdout && err.stdout.toString().trim()) out = err.stdout.toString();
+    else return { names, duplicates: [], skipped: err.code === "ETIMEDOUT" ? "grep timed out" : `grep failed (${err.code ?? `exit ${err.status ?? "?"}`})` };
   }
   const self = resolve(filePath);
   const targetMod = moduleOf(filePath);
@@ -72,9 +82,17 @@ export function detectDuplication(filePath: string, content: string, cwd: string
  * escalating to a hard "block" once 2+ existing declarations are found. Returns
  * `null` when no duplicate symbol is found at all.
  */
-export function dryGate(tool: string, filePath: string, content: string | undefined, cwd: string | undefined): Prompt | null {
+export function dryGate(tool: string, filePath: string, content: string | undefined, cwd: string | undefined, run: GrepRunner = runGrep): Prompt | null {
   if (!cwd || (tool !== "Write" && tool !== "Edit") || !content) return null;
-  const dup = detectDuplication(filePath, content, cwd);
+  const dup = detectDuplication(filePath, content, cwd, run);
+  if (dup.skipped && dup.duplicates.length === 0) {
+    return {
+      kind: "inform",
+      title: "DRY check skipped",
+      reason: `${dup.skipped}: duplicate-declaration check did not run for [${dup.names.slice(0, 5).join(", ")}]. Fail-open (advisory gate); grep for existing declarations yourself.`,
+      userMessage: `DRY check skipped (${dup.skipped})`,
+    };
+  }
   if (dup.duplicates.length === 0) return null;
   const names = dup.names.slice(0, 5).join(", ");
   let files = dup.duplicates.slice(0, 3).join(", ");
