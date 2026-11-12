@@ -1,4 +1,4 @@
-import { matchPatterns, GIT_BLOCKED, GIT_ASK } from "./patterns";
+import { matchGitPatterns, GIT_BLOCKED, GIT_ASK } from "./patterns";
 import type { PolicyResult } from "./interfaces/types";
 
 /**
@@ -11,7 +11,7 @@ import type { PolicyResult } from "./interfaces/types";
  */
 export function evaluateGitGates(command: string | undefined, ralphSafe: boolean): PolicyResult | null {
   if (ralphSafe || !command) return null;
-  if (matchPatterns(command, GIT_BLOCKED)) {
+  if (matchGitPatterns(command, GIT_BLOCKED)) {
     const reason = `Destructive git command: ${command}`;
     return {
       decision: "deny",
@@ -24,7 +24,7 @@ export function evaluateGitGates(command: string | undefined, ralphSafe: boolean
       },
     };
   }
-  if (matchPatterns(command, GIT_ASK)) {
+  if (matchGitPatterns(command, GIT_ASK)) {
     return {
       decision: "deny",
       message: `Git operation requires confirmation: ${command}`,

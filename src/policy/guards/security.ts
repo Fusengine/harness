@@ -2,6 +2,9 @@ import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
 import { isTempOnlyDelete } from "./security-temp-delete";
 import { remoteLocalView } from "../remote-target";
+import { isTrashDelete } from "./security-trash";
+import { RM_ROOT_LABEL, isLiteralOperand, rmOperands, rmTargetsRoot } from "./security-rm-root";
+import { expand } from "../effective-segments";
 
 /** Label of the system-directory delete block; the only one the temp-dir narrowing lifts. */
 const SYSTEM_DIR_LABEL = "DANGEROUS PATTERN: recursive delete of a system directory";
@@ -83,28 +86,51 @@ function stripHeredoc(cmd: string): string {
 /**
  * Guards against dangerous Bash commands. Parity `security_rules.validate_command`
  * + `security-guard.py`: ACCUMULATE every matched violation, then deny when any
- * critical matched else ask, joining all violation labels in the reason. The
- * generic `rm` ask is exempt when the command targets a trash location (parity
- * `not re.search('trash', cmd)`).
+ * critical matched else ask, joining all violation labels in the reason. Every
+ * pattern is also matched against each command the line really runs behind a
+ * wrapper (`sh -c '…'`, `cd x &&`, `( … )`, `$(…)`; see `expand`), so a wrapper
+ * never weakens a verdict. The generic `rm` ask is waived only when every `rm`
+ * the line runs deletes inside a trash directory (never for the bare word
+ * "trash"; `mv x ~/.Trash/` is no `rm` and stays allowed).
  */
 export function securityGuard(ctx: GuardContext): Prompt | null {
   if (ctx.tool !== "Bash" || !ctx.command) return null;
   const cmd: string = stripHeredoc(ctx.command);
   // A plain `rm` of temp-dir children only (judged on the RAW command, so any heredoc keeps main's verdict): the
   // system-directory block steps aside for the rm ask, which is then never trash-exempt. Otherwise identical to main.
-  const lifted: boolean = SYSTEM_DIR_RE.test(cmd) && isTempOnlyDelete(ctx.command);
-  const hasTrash: boolean = !lifted && /trash/i.test(cmd);
+  const raw: string = ctx.command;
+  // PROVEN-remote ssh payloads are cut out of the local view: every REMOTE_RELAXED label (and the rm-root refusal) is judged on
+  // that view only, so a payload-only hit steps aside; all other labels keep firing on the whole command. The view is matched
+  // raw (never heredoc-stripped): a stray `<<'EOF'` operator left in it could otherwise pair with a later local line and hide it.
+  const local: string | null = remoteLocalView(raw);
+  // Canonical text (quotes resolved) only for the verbs the rm / unlink patterns are about: `grep -n "rm" f` is no rm.
+  const textsOf = (src: string, head: string) => {
+    const { items } = expand(src);
+    const texts: string[] = [head, ...items.flatMap((i) => (i.verb === "rm" && !rmOperands(i.argv).some((o) => isLiteralOperand(i.seg, o)) || i.verb === "unlink" ? [i.text, i.seg] : [i.seg]))];
+    return { items, texts, head, raw: src };
+  };
+  const whole = textsOf(raw, cmd);
+  // A heredoc fed to `ssh` is never proven remote, and its body keeps today's verdict for the relaxable labels (read heredoc-stripped, as on
+  // main); a heredoc fed to a LOCAL shell keeps the stricter body-expanded reading.
+  const sshHeredoc: boolean = /\bssh\b[^\n]*<</.test(raw);
+  const view = local !== null ? textsOf(local, local) : sshHeredoc ? { ...textsOf(cmd, cmd), raw } : whole;
+  // The same narrowing applies to a wrapped / quoted `rm` (judged on its canonical text).
+  const liftedText = (s: typeof whole, t: string): boolean => SYSTEM_DIR_RE.test(t) && isTempOnlyDelete(t === s.head ? s.raw : t);
+  const lifted: boolean = view.texts.some((t) => liftedText(view, t));
+  // New waiver = old one (the word "trash" in the command) AND the precise rule: it can only ever ask where main allowed.
+  const hasTrash: boolean = !lifted && /trash/i.test(view.head) && isTrashDelete(view.items);
+  const hits = (re: RegExp, label: string): boolean => {
+    const s = REMOTE_RELAXED.has(label) ? view : whole;
+    return s.texts.some((t) => re.test(t) && !(label === SYSTEM_DIR_LABEL && liftedText(s, t)));
+  };
 
-  // PROVEN-remote ssh payloads are cut out of the local view: a relaxable rule that fires only on the payload steps aside.
-  // The view is matched raw (never heredoc-stripped): a stray `<<'EOF'` operator left in it could otherwise pair with a later local
-  // line and hide it. Matching more text can only keep more of today's hits, never fewer.
-  const local: string | null = remoteLocalView(ctx.command);
-  const offLocal = ({ re, label }: LabeledPattern): boolean => local !== null && REMOTE_RELAXED.has(label) && !re.test(local);
-
-  const critical: string[] = CRITICAL_PATTERNS.filter((p) => p.re.test(cmd) && !(lifted && p.label === SYSTEM_DIR_LABEL) && !offLocal(p)).map((p) => p.label);
+  const critical: string[] = CRITICAL_PATTERNS.filter(({ re, label }) => hits(re, label)).map((p) => p.label);
   const ask: string[] = ASK_PATTERNS.filter(
-    (p) => p.re.test(cmd) && !(hasTrash && p.label.startsWith("DELETE: 'rm'")) && !offLocal(p),
+    ({ re, label }) => hits(re, label) && !(hasTrash && label.startsWith("DELETE: 'rm'")),
   ).map((p) => p.label);
+  // Only when no existing critical pattern already names the delete (keeps every existing deny message byte-identical).
+  if (critical.length === 0 && rmTargetsRoot(view.items)) critical.push(RM_ROOT_LABEL);
+  // An unreadable line (`sh -c "$CMD"`, nesting past the analysis budget) is not judged here: `opaqueShellGuard` asks, last in the chain.
   if (critical.length === 0 && ask.length === 0) return null;
 
   if (critical.length > 0) {
