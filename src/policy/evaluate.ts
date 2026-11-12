@@ -4,6 +4,7 @@ import { computeEditResultLines, computePatchResultLines } from "./edit-outcome"
 import { resolveMaxLines } from "../config/limits";
 import { matchPatterns, GIT_BLOCKED, RALPH_SAFE, isRalphMode } from "./patterns";
 import { runGuards } from "./guards";
+import { sshToShellGuard } from "./guards/ssh-to-shell";
 import { isSingleCommand, buildNeverApprovalPrompt, NEVER_SAFE, isSafePushForm } from "./never-approval";
 import { evaluateGitGates } from "./git-gates";
 import type { PolicyContext, PolicyResult } from "./interfaces/types";
@@ -16,6 +17,15 @@ export type { PolicyContext, PolicyResult } from "./interfaces/types";
  * their harness's native response (Claude `permissionDecision`, etc.).
  */
 export function evaluate(ctx: PolicyContext): PolicyResult {
+  const base = evaluateBase(ctx);
+  if (base.decision !== "allow") return base;
+  // Only ever ADDS an ask: consulted after every other policy, and only when they would all allow.
+  const ask = sshToShellGuard(ctx);
+  return ask ? { decision: "deny", message: ask.reason, prompt: ask } : base;
+}
+
+/** The policies that existed before the ssh-to-shell ask: guards, git gates, file-size. */
+function evaluateBase(ctx: PolicyContext): PolicyResult {
   const guard = runGuards(ctx);
   if (guard) return { decision: "deny", message: guard.reason, prompt: guard };
   // Ralph mode (opt-in via RALPH_MODE) exempts the SAFE git commands from the git
