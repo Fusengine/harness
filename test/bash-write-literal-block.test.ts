@@ -1,9 +1,22 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { bashWriteGuard } from "../src/policy/guards/bash-write";
 import { REAL_CWD } from "./helpers/real-cwd";
 import { D, guardVerdict } from "./helpers/redir-corpus";
 
 const SP = D;
+
+/** True when `p` physically resolves to a directory (macOS `/private/tmp` yes, Linux no). */
+const resolvesToDir = (p: string): boolean => {
+  try {
+    return existsSync(p) && statSync(realpathSync(p)).isDirectory();
+  } catch {
+    return false;
+  }
+};
+const PRIVATE_TMP = resolvesToDir("/private/tmp");
+/** Directory that exists on no host: stands in for `/private/tmp` on Linux to exercise the same fail-closed branch. */
+const MISSING_DIR = "/private/fh-bwlit-no-such-dir";
 const HEREDOC = (head: string, body: string, tail = "EOF"): string => `${head}\n${body}\n${tail}`;
 
 /** Literal non-code writes: ask -> block with a Write/Edit message. */
@@ -20,7 +33,6 @@ const BLOCK_LITERAL: ReadonlyArray<readonly [string]> = [
   ["echo 'a b' > notes.md 2>&1"],
   // Literal text is not command output, even into system temp.
   ["echo x > /tmp/fh-bwlit-lit.txt"],
-  ["printf 'a' > /private/tmp/fh-bwlit-lit.txt"],
 ];
 
 /** Literal echo with an fd-prefixed redirect into temp is still literal text: the temp window must not take it. */
@@ -31,7 +43,6 @@ const ALLOW: ReadonlyArray<readonly [string]> = [
   [`git diff > ${SP}/x.patch`],
   [`git log --oneline > ${SP}/out.log 2>&1`],
   [`bun test > ${SP}/out.log 2>&1`],
-  ["git diff > /private/tmp/fh-bwlit-x.patch"],
   ["git diff > /tmp/fh-bwlit-x.patch"],
   ["git show HEAD > /tmp/fh-bwlit-y.patch"],
   ["echo hi"],
@@ -110,6 +121,19 @@ describe("bash write: literal text -> block, command output in scratchpad/temp -
   });
   test.each(BLOCK_CODE)("block code file: %s", (cmd) => {
     expect(guardVerdict(cmd, SP, REAL_CWD)).toBe("block");
+  });
+  // `/private/tmp` is macOS-only: where it resolves, literal text blocks and command output is allowed;
+  // where it cannot be resolved (Linux) the guard fails closed to ask, never allow.
+  test("/private/tmp: literal text -> block where it resolves, ask (never allow) elsewhere", () => {
+    expect(guardVerdict("printf 'a' > /private/tmp/fh-bwlit-lit.txt", SP, REAL_CWD)).toBe(PRIVATE_TMP ? "block" : "ask");
+  });
+  test("/private/tmp: command output -> allow where it resolves, ask (never allow) elsewhere", () => {
+    expect(guardVerdict("git diff > /private/tmp/fh-bwlit-x.patch", SP, REAL_CWD)).toBe(PRIVATE_TMP ? "allow" : "ask");
+  });
+  test("unresolvable temp parent fails closed to ask (the Linux branch of the /private/tmp rows)", () => {
+    expect(resolvesToDir(MISSING_DIR)).toBe(false);
+    expect(guardVerdict(`printf 'a' > ${MISSING_DIR}/x.txt`, SP, REAL_CWD)).toBe("ask");
+    expect(guardVerdict(`git diff > ${MISSING_DIR}/x.patch`, SP, REAL_CWD)).toBe("ask");
   });
   test("system temp allow does not need a scratchpad dir", () => {
     expect(guardVerdict("git diff > out.log")).toBe("ask");
