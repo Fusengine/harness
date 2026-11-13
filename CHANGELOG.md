@@ -4,7 +4,9 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
-## [0.1.118] - 2026-11-13
+## [0.1.119] - 2026-11-13
+
+0.1.118 was never published: its bump was superseded by this release after a Linux-only test failure.
 
 ### Added
 
@@ -12,6 +14,7 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ### Fixed
 
+- **test: make the /private/tmp bash-write rows host-aware** (`test/bash-write-literal-block.test.ts`) — the macOS-only `/private/tmp` rows are host-conditional; on Linux they assert the guard's fail-closed ask. Guard code unchanged. Tests: `bash-write-literal-block`.
 - **confirm: deny CONFIRM relays into nested agent CLIs on the core path** — an agent inside Codex or Kimi could arm its own CONFIRM code by relaying it through a nested CLI call (`codex exec resume`, `kimi -p`, `claude -p`, `cursor-agent`, npx/bunx/uvx launchers, tmux/screen/zellij/wezterm/kitty typers). A core guard now denies those relays on every host; motion skips its own CONFIRM clause when core covers it. Tests: `confirm-relay-core`.
 - **codex-rules: drop the rm prompt rule so the CONFIRM code can authorize a delete** — under `approval_policy=never` a Codex `prefix_rule` with `decision="prompt"` becomes Forbidden; `rm` (and its `/bin`, `/usr/bin` aliases) moves to the skip-list and the PreToolUse hook stays the gate. Forbidden rules for `rm -rf` of `/`, `~` and system dirs are unchanged. Tests: `codex-rules`, `codex-rules-rm`.
 - **gates: fail closed on a crashed release gate, warn visibly on skipped linters, gate wrapped git commit** — a release gate crash on a release-shaped command asks instead of allowing; linter spawn failure/timeout and DRY grep timeout allow with a visible warning; `preCommitGate` fires for `git commit` behind `cd x &&`, `git -C`, env prefixes, `sh -c`, subshells and groups.
