@@ -26,14 +26,6 @@ export const ASK_RULES: CodexPrefixRule[] = [
     notMatch: ["node eval.js"],
   },
   {
-    sourceLabel: "DELETE: 'rm' permanently deletes - confirmation required",
-    pattern: ["rm"],
-    decision: "prompt",
-    justification: "rm permanently deletes; confirm before running.",
-    match: ["rm file.txt"],
-    notMatch: ["rmdir empty"],
-  },
-  {
     sourceLabel: "DELETE: 'unlink' command detected - confirmation required",
     pattern: ["unlink"],
     decision: "prompt",

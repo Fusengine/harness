@@ -10,6 +10,11 @@ import type { CodexSkipEntry } from "./types";
  */
 export const SKIP_LIST: CodexSkipEntry[] = [
   {
+    sourceLabel: "DELETE: 'rm' permanently deletes - confirmation required",
+    reason:
+      "rm is gated by the PreToolUse hook with a one-time CONFIRM code and a trash hint; a Codex prompt rule turns into Forbidden under approval_policy=never and makes that code unusable. rm -rf of / ~ and system dirs stay forbidden (rules/rm-variants.ts).",
+  },
+  {
     sourceLabel: "DANGEROUS PATTERN: fork bomb",
     reason:
       "Shell function-definition syntax `:(){ :|:& };:` is not a single argv invocation — no prefix_rule can express it.",
