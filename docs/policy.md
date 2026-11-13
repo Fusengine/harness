@@ -31,8 +31,9 @@ interface PolicyResult {
 ```
 
 Current policies, in order (`evaluate.ts`):
-1. **guard chain** (`runGuards`, see [guards.md](./guards.md)) — security,
-   protected-path, bash-write, interface-separation, install → `deny`
+1. **guard chain** (`runGuards`, see [guards.md](./guards.md)) — git-flow,
+   confirm-relay, security, protected-path, bash-write, interface-separation,
+   install, opaque-shell → `deny`
    (block or ask) on the first match. Fail-closed: a guard that throws is
    treated as a block.
 2. **git guard** — `command` matching `GIT_BLOCKED` → block;

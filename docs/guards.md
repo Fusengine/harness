@@ -24,17 +24,29 @@ wraps `evaluate`/`evaluateApex` the same way, so a bug can never disable enforce
 
 | Guard | Fires when | kind |
 |-------|-----------|------|
-| `securityGuard` | `rm -rf /\|/etc\|/usr…`, fork bomb, `curl \| sh`, `mkfs`/`shred`/`fdisk`/`diskutil erase`, `> /dev/{sda,hda,nvme}` | block |
+| `gitFlowGuard` | branch-name convention, `gh pr merge` with squash/rebase (runs first so an ask can't hide it) | block |
+| `confirmRelayGuard` | a `CONFIRM <code>` relayed through a nested agent CLI or session typer (`codex exec`, `kimi -p`, `claude -p`, `npx …`, `tmux send-keys`, …) — every host; see [adapters.md](./adapters.md#confirm-relay-guard-core-path-every-host) | block |
+| `securityGuard` | `rm -rf /\|/etc\|/usr…`, recursive `rm` of `/`, `~`, a home or top-level system directory (any spelling, also behind wrappers), fork bomb, `curl \| sh`, `mkfs`/`shred`/`fdisk`/`diskutil erase`, `> /dev/{sda,hda,nvme}` | block |
 | | `sudo`/`su`/`doas`/`passwd`, `chmod 777`, recursive `chown`, `eval`, `rm`/`unlink`, write to `/etc` | ask |
 | `protectedPathGuard` | Write/Edit under `.claude/plugins\|logs\|cache`, `.git/` | block |
-| `bashWriteGuard` | `sed -i`, heredoc/redirect to a code file, `python3 -c` whose inline script mutates files/spawns a process (content-gated — same treatment as `node -e`, a read-only one-liner passes) | block |
-| | redirect to a non-code file, `tee`, `dd of=`, `node -e` writes | ask |
+| `bashWriteGuard` | `sed -i`, heredoc/redirect to a code file, `python3 -c` whose inline script mutates files/spawns a process (content-gated — same treatment as `node -e`, a read-only one-liner passes); literal-text writes (`echo`/`printf`/heredoc/`tee`) to an ordinary non-code file ("use Write/Edit"); `cp`/`mv`/`install`/`ln` of provably foreign content (temp/scratchpad or non-code source, or a source outside the project) onto a project code file | block |
+| | other redirects to a non-code file, `tee`, `dd of=`, `node -e` writes | ask |
+| | *allowed:* a redirect proven inside the session scratchpad, and one simple read-only producer (or read-only `git` report) whose output goes straight to the scratchpad or system temp | — |
 | `interfaceSeparationGuard` | top-level `interface`/`type`/`protocol`/`record` in a TS/JS/Vue/Svelte, Python, **Go**, **Java/Kotlin**, PHP, or Swift component/view/controller/handler | block |
 | `installGuard` | `npm/yarn/pnpm/bun/pip/cargo/go/gem/composer` + `brew/apt/dnf/pacman` installs | ask |
+| `opaqueShellGuard` | last in the chain: a command or shell payload built at run time that cannot be analysed (`sh -c "$CMD"`, `$CMD args`, …) | ask |
 
 Plus, inside `evaluate()` after the chain:
 - **git** — destructive ops (`push --force`, `reset --hard`, `branch -D`…) → **block**;
   routine ops (`push`, `checkout`, `commit`, `add`, `branch -d`, `merge`…) → **ask**.
+- **ssh to shell** — `ssh host '…' | sh` (bash/zsh, with or without `sudo`) → **ask**,
+  consulted last and only when everything else would allow. A single plain
+  `ssh [options] host 'payload'` to a proven-remote host is judged on its local
+  view only (local-only labels such as `sudo` or plain `rm` don't apply to the
+  remote payload).
+- **rm on Codex/Kimi/Cursor** — the generic `rm` ask is degraded to a deny with a
+  trash hint and, for a single literal non-root `rm`, a one-time `CONFIRM` code;
+  see [adapters.md](./adapters.md#rm-on-hosts-without-interactive-approval).
 - **file-size** — over `FUSE_SOLID_MAX_LINES` (default 100). A **Write** judges its
   new content; an **Edit** judges the existing on-disk file. `Explore`/`Plan` agents are exempt.
 - **verbosity** (`capVerbosity`) — caps exa `numResults`≤3 + `tokensNum`≤2000 and

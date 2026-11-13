@@ -63,11 +63,19 @@ so an `Edit` on an already-oversized file blocks; pass `agentType` to exempt
 `Explore`/`Plan` agents.
 
 After the stateless guards, the gate runs **effectful** checks (each fail-open):
-`preCommitGate` (runs eslint/tsc/prettier/ruff on a `git commit`), `modularGate`
+`preCommitGate` (runs eslint/tsc/prettier/ruff on a `git commit`, also behind
+`cd x &&`, `git -C`, env prefixes, `sh -c` and subshells, in the session cwd's
+project and the commit's own working tree — a linked worktree's toplevel; a
+linter that cannot run is allowed with a visible warning), `modularGate`
 (Next.js `modules/` and Laravel FuseCore structure + cross-module imports), and
 `dryGate` (greps the codebase for duplicate declarations). The design-agent
 pipeline is dispatched separately and is inert unless a design agent is active —
 see [design.md](./design.md).
+
+The release gate (`runtime/release-gate/pre.ts`) is the exception to fail-open:
+it runs only when every other gate allowed, and if it crashes on a command
+shaped like a release step (`gh pr merge`, `git tag`) it asks instead of
+allowing; any other command stays allowed.
 
 ## Tracking (`./tracking`)
 

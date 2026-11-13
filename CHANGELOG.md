@@ -10,7 +10,7 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ### Added
 
-- **confirm: trash hint and one-time CONFIRM code for rm on Codex and Kimi** — a plain `rm`/`rm -r` with literal, non-root targets is no longer irreversibly denied on hosts without interactive approval: the deny suggests `mv <path> ~/.Trash/` (allowed, no code) and issues a one-time CONFIRM code that authorizes exactly that command once. Root, home, system, top-level and cwd targets, globs, variables and compound forms stay plain-denied. The approval forgery guard also rejects agent-CLI commands carrying a CONFIRM phrase. Tests: `confirm-rm-trash`, `motion-forgery`.
+- **confirm: trash hint and one-time CONFIRM code for rm on Codex and Kimi** — a single plain `rm` (including `rm -r`/`rm -rf`) with literal, non-root targets is no longer irreversibly denied on hosts without interactive approval: the deny suggests `mv <path> ~/.Trash/` (allowed, no code) and issues a one-time CONFIRM code that authorizes exactly that command once. An `rm` carrying both `-r` and `-f` aimed at root, home, system, top-level or cwd targets, globs, variables or compound forms stays plain-denied (trash hint only, no code); any other `rm` form keeps the pre-existing generic CONFIRM code plus the generic `mv <path> ~/.Trash/` hint. The approval forgery guard also rejects agent-CLI commands carrying a CONFIRM phrase. Tests: `confirm-rm-trash`, `motion-forgery`.
 
 ### Fixed
 
