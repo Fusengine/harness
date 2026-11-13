@@ -9,6 +9,19 @@ import type { Prompt } from "../../prompt/types";
 import { expansionText } from "./shell-verbs";
 
 const PHRASE = /MOTION-APPROVE/i;
+/**
+ * A typed confirmation (`CONFIRM ab12`, also `confirm_ab12` / `CONFIRM-ab12`): the same shape `typedConfirmCode` accepts,
+ * where the code ENDS the argument (a closing quote or wrapper, a shell operator or comment, a newline, the end of the
+ * command, or the next option). Prose such as `confirm face detection works` or `confirm 2025 deadline` is no code and
+ * is not matched.
+ */
+const CONFIRM_PHRASE = /\bconfirm[ _-]*[0-9a-f]{4}(?=\s*(?:['"`*_»;&|)#<>]|$)|\s+-|[ \t]*\n)/i;
+/** An agent CLI word (`claude`, `codex`, `cursor-agent`, `gemini`, `kimi`) at the start or after whitespace / a path slash. */
+const AGENT_CLI = String.raw`(?:^|[\s/])(?:claude|codex|cursor-agent|gemini|kimi)`;
+/** An agent CLI followed by arguments. */
+const AGENT_CLI_ARGS = new RegExp(`${AGENT_CLI}(?=\\s)`);
+/** An agent CLI word, with or without arguments. */
+const AGENT_CLI_WORD = new RegExp(`${AGENT_CLI}(?=\\s|$)`);
 /** Tools that can queue a prompt for later or send one to a session. */
 const DEFERRED_TOOL = /cron|schedule|wakeup|remotetrigger|sendmessage/i;
 
@@ -30,10 +43,15 @@ function block(detail: string): Prompt {
 export function approvalForgeryViolation(tool: string, command: string | undefined, input: Record<string, unknown>): Prompt | null {
   if (tool === "Bash") {
     if (!command) return null;
-    const resume = /(?:^|[\s/])(?:claude|codex|cursor-agent|gemini|kimi)(?=\s)/.test(command)
-      && /(?:^|\s)(?:--resume|--continue|--session|--last|-r|-c|-C|-S|resume)(?=\s|=|$)/.test(command);
+    const agentCli = AGENT_CLI_ARGS.test(command);
+    const resume = agentCli && /(?:^|\s)(?:--resume|--continue|--session|--last|-r|-c|-C|-S|resume)(?=\s|=|$)/.test(command);
     const dynamic = /[$`<>]/.test(expansionText(command)) || /\$'/.test(command);
-    return PHRASE.test(command) || PHRASE.test(expansionText(command)) || (resume && dynamic)
+    // The CONFIRM code (Codex/Kimi/Cursor rm and git asks) is typed by the owner only: an agent CLI carrying it is a self-confirmation.
+    // A non-literal build of the phrase (`"CONFIRM $(echo ab12)"`, `$'CONFIRM \x61b12'`) is refused the same way as a dynamic resumed prompt.
+    const agentWord = AGENT_CLI_WORD.test(command);
+    const confirm = agentWord && (CONFIRM_PHRASE.test(command) || CONFIRM_PHRASE.test(expansionText(command))
+      || (/\bconfirm/i.test(command) && (dynamic || /\\[xu0-7]/i.test(command))));
+    return PHRASE.test(command) || PHRASE.test(expansionText(command)) || confirm || (resume && dynamic)
       ? block("Bash approval phrase or non-literal resumed session prompt") : null;
   }
   if (!DEFERRED_TOOL.test(tool)) return null;

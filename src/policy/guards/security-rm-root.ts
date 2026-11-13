@@ -4,7 +4,7 @@ import type { Effective } from "../effective-segments";
 export const RM_ROOT_LABEL = "DANGEROUS PATTERN: recursive delete of /, ~ or a top-level system directory";
 
 /** Top-level directories whose deletion (the directory itself or `/dir/*`) is never ordinary work. */
-const TOP_DIRS = ["etc", "usr", "var", "bin", "sbin", "boot", "lib", "lib64", "System", "Library", "Applications", "opt", "private", "Users", "home", "root", "dev", "proc", "sys", "Volumes"];
+export const TOP_DIRS: readonly string[] = ["etc", "usr", "var", "bin", "sbin", "boot", "lib", "lib64", "System", "Library", "Applications", "opt", "private", "Users", "home", "root", "dev", "proc", "sys", "Volumes"];
 /** `/`, `/.`, `/..`, `/*`, `//`, `~`, `~/`, `~/*`, `~user`, `$HOME`, `${HOME}` (with an optional trailing `/` or `/*`). */
 const ROOT_LIKE = /^(?:\/+(?:\.{1,2}|\*)?\/*|~(?:[A-Za-z0-9_][A-Za-z0-9_-]*)?\/*(?:\*|\.)?|\$\{?HOME\}?\/*(?:\*|\.)?)$/;
 const TOP_DIR = new RegExp(`^/+(?:${TOP_DIRS.join("|")})/*(?:\\*|\\.)?$`);
@@ -13,8 +13,17 @@ const HOME_DIR = /^\/+(?:Users|home)\/[^/]+\/*(?:\*)?$/;
 
 /** True when `argv` carries a recursive flag in any spelling (`-r`, `-R`, `-rf`, `-Rf`, `--recursive`). */
 function recursive(argv: readonly string[]): boolean {
+  return rmOptions(argv).some((a) => a === "--recursive" || (/^-[A-Za-z]+$/.test(a) && /[rR]/.test(a)));
+}
+
+/**
+ * Options of one `rm`: the dash words before the `--` that ends them.
+ * @param argv - Arguments of the `rm` (verb excluded).
+ * @returns The words starting with `-` that precede `--` (all of `argv` when there is no `--`).
+ */
+export function rmOptions(argv: readonly string[]): string[] {
   const end = argv.indexOf("--");
-  return (end < 0 ? argv : argv.slice(0, end)).some((a) => a === "--recursive" || (/^-[A-Za-z]+$/.test(a) && /[rR]/.test(a)));
+  return (end < 0 ? argv : argv.slice(0, end)).filter((a) => a.startsWith("-"));
 }
 
 /**
