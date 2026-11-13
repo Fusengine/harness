@@ -4,6 +4,26 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.118] - 2026-11-13
+
+### Added
+
+- **confirm: trash hint and one-time CONFIRM code for rm on Codex and Kimi** — a plain `rm`/`rm -r` with literal, non-root targets is no longer irreversibly denied on hosts without interactive approval: the deny suggests `mv <path> ~/.Trash/` (allowed, no code) and issues a one-time CONFIRM code that authorizes exactly that command once. Root, home, system, top-level and cwd targets, globs, variables and compound forms stay plain-denied. The approval forgery guard also rejects agent-CLI commands carrying a CONFIRM phrase. Tests: `confirm-rm-trash`, `motion-forgery`.
+
+### Fixed
+
+- **confirm: deny CONFIRM relays into nested agent CLIs on the core path** — an agent inside Codex or Kimi could arm its own CONFIRM code by relaying it through a nested CLI call (`codex exec resume`, `kimi -p`, `claude -p`, `cursor-agent`, npx/bunx/uvx launchers, tmux/screen/zellij/wezterm/kitty typers). A core guard now denies those relays on every host; motion skips its own CONFIRM clause when core covers it. Tests: `confirm-relay-core`.
+- **codex-rules: drop the rm prompt rule so the CONFIRM code can authorize a delete** — under `approval_policy=never` a Codex `prefix_rule` with `decision="prompt"` becomes Forbidden; `rm` (and its `/bin`, `/usr/bin` aliases) moves to the skip-list and the PreToolUse hook stays the gate. Forbidden rules for `rm -rf` of `/`, `~` and system dirs are unchanged. Tests: `codex-rules`, `codex-rules-rm`.
+- **gates: fail closed on a crashed release gate, warn visibly on skipped linters, gate wrapped git commit** — a release gate crash on a release-shaped command asks instead of allowing; linter spawn failure/timeout and DRY grep timeout allow with a visible warning; `preCommitGate` fires for `git commit` behind `cd x &&`, `git -C`, env prefixes, `sh -c`, subshells and groups.
+- **bash-write: block literal Bash text writes, allow command output to temp** — literal-content echo/printf/cat-heredoc/tee writes to ordinary non-code files deny with "use Write/Edit"; a narrow producer allowlist writing command output to the scratchpad or system temp is allowed.
+- **bash-write: refuse cp/mv/install/ln of foreign content onto project code files** — tighten-only layer (strictest of both verdicts): refuses provable foreign-content writes onto a project code file (temp/scratchpad source, non-code source, or source outside the proven project root); each destination is judged against its own proven project root.
+- **precommit: lint the session's worktree** — `preCommitGate` lints the payload cwd and its git toplevel; the commit trigger stays a superset of the previous one.
+- **policy: close git/rm/gh gaps behind wrappers, keep release detection a superset** — git/rm/gh verdicts no longer weaken behind global options, `cd x &&`, env prefixes, `sh -c`, subshells or exec wrappers; a trash comment no longer waives the rm ask; rm of root/home/system dirs is refused; unreadable commands ask. Release detection falls back to the base classifier, so no previously detected release step is lost.
+- **apex: credit the Codex native web tool like WebSearch** — the exact names `webrun` / `web__run` / `web.run` now credit doc consultation, the research phase, the per-framework stamp and the changelog research log.
+- **security: stop local-only guards from judging a proven-remote ssh payload** — a single plain `ssh [allowlisted options] host 'payload'` to a proven-remote host is judged on its local view only; anything else keeps the full local judgment.
+- **security: ask before ssh output is piped into a local shell** — `ssh host '…' | sh` (bash/zsh, with or without sudo) now asks.
+- **combined: restore the strictest verdict lost in the merges** — a heredoc fed to ssh on a proven-local host gets the full local judgment again; `env -` and `xargs --replace|--eof` fire the pre-commit trigger again.
+
 ## [0.1.117] - 2026-11-11
 
 ### Changed
