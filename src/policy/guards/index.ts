@@ -7,6 +7,7 @@ import { interfaceSeparationGuard } from "./interface-separation";
 import { installGuard } from "./install";
 import { gitFlowGuard } from "./git-flow";
 import { opaqueShellGuard } from "./opaque-shell";
+import { confirmRelayGuard } from "./confirm-relay";
 
 export * from "./context";
 export * from "./git-flow";
@@ -19,6 +20,7 @@ export * from "./install";
 /** Ordered guard chain: git-flow blocks (an ask must never hide them), critical/security + protected, then writes/installs. */
 export const GUARDS: ReadonlyArray<Guard> = [
   gitFlowGuard,
+  confirmRelayGuard,
   securityGuard,
   protectedPathGuard,
   bashWriteGuard,

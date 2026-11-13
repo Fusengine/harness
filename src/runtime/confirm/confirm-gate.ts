@@ -40,7 +40,9 @@ function frozenHint(sessionId: string, now: number, home?: string): string {
  * to a deny. Returns `null` when this mechanism doesn't apply AT ALL — any
  * harness other than codex/kimi/cursor, any prompt kind other than `ask`, no
  * command to key a hash off, or an irreversible command (G4) — in which case
- * the caller's ORIGINAL prompt/response path runs completely unchanged. That
+ * the caller's ORIGINAL prompt/response path runs completely unchanged. The one
+ * exception is an irreversible `rm` DELETE ask: it returns a code-less deny that
+ * only adds the trash hint ({@link withTrashHint}). That
  * `null` fast-path, hit on every claude-code call and every non-`ask` prompt,
  * IS the non-regression property.
  * @param id - Harness target id.

@@ -125,3 +125,10 @@ mv "$C/dist" ~/.Trash/harness-dist-codex-rmconfirm-2026-11-13 && mv ~/.Trash/har
 K=~/.kimi-code/node_modules/@fusengine/harness
 mv "$K/dist" ~/.Trash/harness-dist-kimi-rmconfirm-2026-11-13 && mv ~/.Trash/harness-dist-kimi-pre-rmconfirm-2026-11-13 "$K/dist"
 ```
+
+## F1 fix: CONFIRM relay guard in core scope
+Defect (challenger F1): the agent-relay check lived only in the `motion` scope, which Codex and Kimi do not wire, so a nested agent CLI call carrying a typed CONFIRM code was allowed in `core`.
+Fix: `src/policy/confirm-relay.ts` (`confirmRelayViolation`) registered as `confirmRelayGuard` in `src/policy/guards/index.ts`, so every host that runs the core gate chain (Claude Code, Codex, Kimi, Cursor) denies it. It is narrow on purpose: it reads an agent CLI the line really runs (`expand`: `sh -c`, `env`, `xargs`, substitutions, `npx codex`), `tmux send-keys`, `osascript`, `expect`; the phrase is the receiver's own (`confirm[\s_-]*<4 hex>\b`, trailing text allowed); the whole line is read only when the agent segment holds a variable or substitution, otherwise its own pipeline. The motion scope keeps its looser check and abstains from the CONFIRM clause only when core-guards is wired AND the core detector fires (one deny, never zero).
+Proof: test/confirm-relay-core.test.ts (CLI path `hook codex|kimi|claude-code core`, isolated HOME; relays denied, ordinary commands unchanged). Chain replay (core, codex and kimi): rm -rf build deny+code; relay through a nested CLI deny; rm still deny; owner types the code in his own session; rm ALLOW once; second rm deny.
+Challenger round 1 REFUTED two limbs; both fixed: receiver-grammar gap (trailing text, tab/newline, no word boundary, xargs placeholder, expect) and 9 false blocks (python/node/bun/screen removed from the typer list, pipeline-scoped reading).
+Known open (not closable by a Bash-text guard): prompt read from a file or stdin written earlier (`codex exec resume --last < file`, `"$(cat file)"`), text decoded or assembled by an interpreter at run time, `ssh host "kimi ..."`, a variable as the command name (`$K ...`), keys sent one at a time. Real fix would be receiver-side origin checks.

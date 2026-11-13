@@ -99,7 +99,7 @@ for (const host of ["codex", "kimi"] as const) {
 }
 
 describe("unit: isIrreversible after the narrowing", () => {
-  test.each([["rm -rf trash/x", false], ["rm -r trash/x", false], ["rm -rf /tmp/whatever", false], ["git stash; rm -rf /tmp/whatever", true], ["rm -rf *", true], ["sh -c 'rm -rf x'", true], ["rm -rf a; rm -rf b", true], ["rm -rf $HOME/x", true], ["rm -rf ~", true], ["rm -rf /", true], ["rm -rf ../x", true], ["rm -rf /./usr", true], ["rm -rf /USERS/me", true], ["rm -rf /tmp", true], ["rm -rf /private/tmp/x", false],["rm -rf /Users//me", true], ["rm -rf /./Users/me", true],["rm -rf x y", false], ["git push --force", true]] as const)("%s -> %p", (cmd, expected) => {
+  test.each([["rm -rf trash/x", false], ["rm -r trash/x", false], ["rm -rf /tmp/whatever", false], ["git stash; rm -rf /tmp/whatever", true], ["rm -rf *", true], ["sh -c 'rm -rf x'", true], ["rm -rf a; rm -rf b", true], ["rm -rf $HOME/x", true], ["rm -rf ~", true], ["rm -rf /", true], ["rm -rf ../x", true], ["rm -rf /./usr", true], ["rm -rf /USERS/me", true], ["rm -rf /tmp", true], ["rm -rf /private/tmp/x", false], ["rm -rf /Users//me", true], ["rm -rf /./Users/me", true], ["rm -rf x y", false], ["git push --force", true]] as const)("%s -> %p", (cmd, expected) => {
     expect(isIrreversible(cmd)).toBe(expected);
   });
 });
@@ -139,7 +139,7 @@ describe("forgery: an agent cannot type the code for itself", () => {
     "printf 'CONFIRM ab12' | kimi",
   ])("Bash %s is blocked", (cmd) => expect(forgeryOf(cmd)).toBe("block"));
 
-  test.each(['codex exec "confirm face detection works"', 'kimi -p "confirm 2025 deadline in README"', 'claude -p "summarise confirm-cafe flow"', "echo CONFIRM","git commit -m 'confirm the plan'", 'echo "CONFIRM ab12"', "codex exec resume abc 'fix the tests'", "kimi --prompt 'list files'"])("Bash %s is not blocked", (cmd) => {
+  test.each(['codex exec "confirm face detection works"', 'kimi -p "confirm 2025 deadline in README"', 'claude -p "summarise confirm-cafe flow"', "echo CONFIRM", "git commit -m 'confirm the plan'", 'echo "CONFIRM ab12"', "codex exec resume abc 'fix the tests'", "kimi --prompt 'list files'"])("Bash %s is not blocked", (cmd) => {
     expect(forgeryOf(cmd)).toBe("allow");
   });
 });
