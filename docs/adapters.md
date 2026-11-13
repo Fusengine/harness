@@ -103,11 +103,61 @@ Guardrails (`src/runtime/confirm/confirm-state.ts`, `confirm-subagent.ts`, `conf
   something short to retype, never as the actual authorization boundary.
 - **G4** — irreversible commands are never confirmable, regardless of a valid
   token: destructive git (`push --force`, `reset --hard`, `branch -D`,
-  `clean -fd`, …, reusing `GIT_BLOCKED`) and any `rm -rf`/`-fr` variant.
+  `clean -fd`, …, reusing `GIT_BLOCKED`) and any `rm` carrying both `-r` and
+  `-f`, with one exception: a single plain `rm` of literal, non-root targets
+  (see [`rm` on hosts without interactive approval](#rm-on-hosts-without-interactive-approval)).
 - **G5** — an explicit refusal (`non`/`no`/`stop`/`cancel`/`annule`/…) in the
   next prompt drops the session's armed tokens. The pending denies SURVIVE on
   the shared path (kimi/cursor) — a code can simply be retyped later; codex
   clears its pending too (pre-existing per-path difference, kept).
+
+### `rm` on hosts without interactive approval
+
+On Codex, Kimi and Cursor the generic `rm` ask is a deny, and its message
+names the trash: `mv <path> ~/.Trash/` (allowed, needs no code;
+`withTrashHint` in `src/runtime/confirm/confirm-rm.ts`, up to 5 literal targets
+shown, else `<path>`). Whether a code is also issued depends on the command:
+
+- **Code issued** — one plain, unwrapped `rm` (`-r`, `-f`, `-rf`, `-v`, `-d`,
+  `-i` and their long forms only) whose operands are all literal and none is
+  the cwd, `/`, `~`, a home directory, a top-level entry or a system tree
+  (`isConfirmableRm`). `CONFIRM <code>` authorizes exactly that command once
+  (5-minute TTL, G1-G3 unchanged).
+- **Deny with the trash hint, no code** — an `rm` with both `-r` and `-f`
+  that is not confirmable: root/home/system/top-level/cwd targets, globs,
+  variables, `..` or `~user` operands, `--no-preserve-root`-style options,
+  chained, piped or wrapped forms (`isIrreversible`). Root-like recursive
+  targets are refused outright by the security guard
+  (`src/policy/guards/security-rm-root.ts`).
+- **Generic path (unchanged)** — any other `rm` that is not confirmable (for
+  example `rm *.log`, `rm $X`, `rm a; rm b`, or `rm -r` without `-f` on a
+  glob) keeps the pre-existing generic `CONFIRM` code plus the generic trash
+  hint.
+
+Claude Code is untouched: it keeps the native interactive `ask`.
+
+### CONFIRM relay guard (core path, every host)
+
+A code is typed by the owner in their own session. `confirmRelayGuard`
+(`src/policy/guards/confirm-relay.ts`, logic in `src/policy/confirm-relay.ts`)
+sits in the core chain every host wires and blocks an agent that relays one
+through a nested agent CLI: `codex exec`/`resume`, `kimi -p`, `claude -p`,
+`cursor-agent`, `gemini`, package launchers (`npx`, `bunx`, `pnpm dlx`, `uvx`,
+`pipx`, …), an interpreter running a script that names one (`node …/codex.js`),
+and session typers (`tmux send-keys`, `screen stuff`, `zellij`, `wezterm`,
+`kitty`, `osascript`, `expect`). It reads the commands the line really runs
+(through `sh -c`, `env`, `xargs`, substitutions) and fires only when the text
+that agent receives holds a code-shaped phrase (`CONFIRM ab12`, also a code
+built by expansion), never on a command that merely mentions confirm (commit
+message, grep, test runner). The Motion approval-forgery guard skips its own
+CONFIRM clause when the core guard covers the host
+(`src/runtime/motion/pre.ts`, `forgery.ts`'s `coreCoversConfirm`), so the owner
+sees one deny.
+
+Known limits: text decoded or assembled at run time past what the reader
+expands, a prompt read from a file written earlier, an `ssh` to a host running
+`kimi`, and a variable used as the command name are not caught. Like the rest
+of this mechanism it is not a security boundary (see below).
 
 **Scope, stated plainly**: this closes a recourse gap for an honest mistake or
 a change of mind under a harness that can't show an interactive prompt — it is
@@ -116,6 +166,26 @@ arbitrary shell access can write its own confirm token directly into the
 session-state file it would need to pass and self-approve; that is true of
 every stateful gate this harness keeps outside a sandbox, not specific to this
 mechanism.
+
+## Codex exec-policy — `harness codex-rules`
+
+`harness codex-rules [--out <path>]` prints (or writes) a Codex execpolicy
+Starlark file derived from `security.ts` (`src/codex-rules/`). Forbidden rules
+cover `rm -rf` of `/`, `~` and the system directories (`rules/rm-variants.ts`)
+among other critical commands; prompt rules cover `chown -R`, `eval`, `unlink`,
+`chmod` variants, … .
+
+Plain `rm` (and `/bin/rm`, `/usr/bin/rm`) has **no** prompt rule: it is in the
+skip-list (`src/codex-rules/skip-list.ts`) because under
+`approval_policy=never` a `prompt` rule becomes Forbidden, which would make the
+`CONFIRM <code>` above unusable. The PreToolUse hook is the only gate for plain
+`rm`. Accepted risk: if the hook does not run (crash, timeout, untrusted hook),
+plain `rm` is no longer gated by exec-policy.
+
+Regenerate and reinstall the rules file after upgrading to 0.1.119 or later
+(the installed `~/.codex/rules/` file is not updated by the package). The
+protected-path guard blocks agents from writing `.codex/rules/`, so the owner
+runs the install.
 
 ## Claude Code — `@fusengine/harness/adapters/claude`
 

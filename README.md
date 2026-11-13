@@ -64,6 +64,7 @@ don't assume either the old or the "everything in one place" story):
 | `harness check` | cli-mode: check staged files in a pre-commit step, exit non-zero on a violation. For harnesses without hooks. |
 | `harness doctor` | Print the version + resolved path of the harness *actually executing*, and compare it to npm's latest — the fast way to catch a stale global (see Pinning). |
 | `harness --version` | Print the running version (bare, on stdout) and exit. |
+| `harness codex-rules [--out <path>]` | Generate the Codex execpolicy rules file (Starlark) from the security patterns; stdout or `--out`. Plain `rm` has no prompt rule (the hook gates it with a CONFIRM code); see [docs/adapters.md](docs/adapters.md#codex-exec-policy--harness-codex-rules). |
 | `harness prd status [--json]` | Read-only, works without `FUSE_PRD=1`. Print each task's router status and sub-task progress. |
 | `harness prd validate <task> [agent]` | Requires `FUSE_PRD=1`. Cross-check a task PRD against agent reports and promote matching sub-tasks/router entries to `validated`. |
 | `harness prd compact <task>` | Requires `FUSE_PRD=1`. Collapse a fully-validated task PRD to its compacted shape. |
@@ -144,9 +145,10 @@ Guard/gate chain evaluated before a tool runs (`src/policy/guards/index.ts`,
 
 | Guard / gate | Fires on |
 |---|---|
-| security | `rm -rf /`, fork bombs, `curl \| sh`; `sudo` (asks) |
+| security | `rm -rf /`, fork bombs, `curl \| sh`; `sudo` (asks); `ssh … \| sh` (asks) |
+| confirm relay | a `CONFIRM <code>` relayed through a nested agent CLI (`codex exec`, `kimi -p`, `claude -p`, `npx …`, `tmux send-keys`, …) — every host |
 | protected-path | edits to `.claude/plugins\|logs\|cache`, `.git/`, the harness's own state dirs |
-| bash-write | `sed -i` / redirects to code files; `python3 -c` judged on content (mutating script → block, read-only → pass, same as `node -e`) |
+| bash-write | `sed -i` / redirects to code files; literal-text `echo`/`printf`/heredoc/`tee` writes to non-code files (→ "use Write/Edit"); `cp`/`mv` of foreign content onto project code files; command output redirected to the scratchpad or system temp is allowed; `python3 -c` judged on content (mutating script → block, read-only → pass, same as `node -e`) |
 | interface-separation | top-level interface/type/protocol in a component/controller |
 | install | `npm/pip/brew/...` installs (asks) |
 | git | destructive git (`push --force`, `reset --hard`, …) — block; routine git — ask |
@@ -183,7 +185,11 @@ Features shipped since 0.1.44, each with its own test:
   SHA-256 hash, never the 4-char display code (which collides by design — it
   exists only for a human to retype); **G4** irreversible commands
   (`push --force`, `reset --hard`, `rm -rf`, `git clean -fd`, `branch -D`, …)
-  are never confirmable, regardless of a valid token; **G5** an explicit
+  are never confirmable, regardless of a valid token — except a single plain
+  `rm` (`-r`/`-rf` included) of literal, non-root targets, which gets a code and
+  a `mv <path> ~/.Trash/` hint (the trash move itself needs no code), while an
+  `rm -rf` of a root/home/system dir, glob, variable or compound form is denied
+  with the hint only; **G5** an explicit
   refusal in the next prompt drops any pending token. **This is a guard
   against accidental/hasty denial with no recourse, not a security control
   against an adversarial agent** — an agent with arbitrary shell access can
@@ -474,6 +480,16 @@ Run `bun run docs:api` for the generated typedoc API reference.
   agent with shell access can write its own confirm token into session state
   and self-approve; this is true of every stateful gate this harness keeps
   outside a sandbox, not specific to this mechanism.
+- **The CONFIRM relay guard has known gaps.** It denies a code relayed through
+  a nested agent CLI or session typer, but not text decoded or assembled at run
+  time, a prompt read from a file written earlier, an `ssh` to a host running
+  `kimi`, or a variable used as the command name
+  ([docs/adapters.md](docs/adapters.md#confirm-relay-guard-core-path-every-host)).
+- **Codex plain `rm` relies on the hook.** `harness codex-rules` emits no
+  prompt rule for `rm` (it would become Forbidden under `approval_policy=never`
+  and make the CONFIRM code unusable), so if the hook does not run on Codex
+  (crash, timeout, untrusted hook) plain `rm` is not gated by exec-policy.
+  Regenerate and reinstall `~/.codex/rules/fusengine.rules` after upgrading.
 
 ## Develop
 
