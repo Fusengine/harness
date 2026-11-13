@@ -66,6 +66,7 @@ export function applyPatchGate(files: readonly NormalizedFile[], cwd: string): P
   const merged = mergedHunksByPath(files);
   const added = addedContentByPath(files);
   const judgedUpdates = new Set<string>();
+  let note: Prompt | null = null;
   for (const f of files) {
     const tool = f.op === "add" ? "Write" : "Edit";
     const protectedDeny = protectedPathGate(tool, f.filePath);
@@ -95,7 +96,9 @@ export function applyPatchGate(files: readonly NormalizedFile[], cwd: string): P
       if (quick.decision !== "allow" && quick.prompt) return quick.prompt;
     }
     const dry = dryGate(tool, f.filePath, f.content, cwd);
-    if (dry) return dry;
+    // An advisory `inform` (duplicate hint / skipped check) must not end the loop: later files still need their static gates.
+    if (dry?.kind === "inform") note ??= dry;
+    else if (dry) return dry;
   }
-  return null;
+  return note;
 }

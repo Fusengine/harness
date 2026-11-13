@@ -110,7 +110,7 @@ test("codex action identity canonicalizes argv/string transport and rejects a di
 
 test("codex diagnostics name rule, canonical command, expected token, and typed rejection", async () => {
   const workdir = cwd();
-  const cmd = "echo log > out.txt";
+  const cmd = "prog log > out.txt";
   const out = await handleHook("codex", codexPre(sid("diagnostic"), cmd, "tool-a", workdir), { now: 1000, cwd: workdir, home: home() });
   expect(out.stdout).toContain("rule ID: bash-write:file-redirect");
   expect(out.stdout).toContain(`canonical command: ${cmd}`);

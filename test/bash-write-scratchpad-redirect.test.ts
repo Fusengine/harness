@@ -3,6 +3,7 @@ import { linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bashWriteGuard } from "../src/policy/guards/bash-write";
+import { askNow } from "./helpers/redir-corpus";
 
 /** Owner's session scratchpad as it appears in the Claude Code payload (`scratchpad_dir`). */
 const OWNER_D = "/private/tmp/claude-501/-Users-brunoazoulay-Labo-docker-lab-dev-local-Dev-ai-claude-code-fuse-harness/a5af2a9f-7ce7-4a24-a606-ba69f9397668/scratchpad";
@@ -44,9 +45,9 @@ describe("owner's exact command and the shapes it generalizes to", () => {
 
 describe("one unsafe target or ambiguity keeps the old verdict", () => {
   test("mixed targets, either order", () => {
-    expect(v(`echo x > ${D}/a > ${P}/b`)).toBe("ask");
-    expect(v(`echo x > ${P}/b > ${D}/a`)).toBe("ask");
-    expect(v(`echo x > ${D}/a; echo y > ${P}/b`)).toBe("ask");
+    for (const cmd of [`echo x > ${D}/a > ${P}/b`, `echo x > ${P}/b > ${D}/a`, `echo x > ${D}/a; echo y > ${P}/b`]) {
+      expect(v(cmd), cmd).toBe(askNow(cmd));
+    }
   });
   test("variable reassigned, command-substituted, late, exported or prefix-form", () => {
     expect(v(`S=${D}; S=${P}/src; echo x > $S/x.log`)).toBe("ask");
@@ -57,11 +58,9 @@ describe("one unsafe target or ambiguity keeps the old verdict", () => {
     expect(v(`S=${P}; echo x > $S/x.log`)).toBe("ask");
   });
   test("traversal, depth 2, trailing slash, sibling and lookalike", () => {
-    expect(v(`echo x > ${D}/../../proj/x`)).toBe("ask");
-    expect(v(`echo x > ${D}/sub/x`)).toBe("ask");
-    expect(v(`echo x > ${D}x/a`)).toBe("ask");
-    expect(v(`echo x > ${P}/scratchpad/x`)).toBe("ask");
-    expect(v(`echo x > ${root}/claude-501/-proj/bbbbbbbb-1111-4222-8333-bbbbbbbbbbbb/scratchpad/x`)).toBe("ask");
+    for (const cmd of [`echo x > ${D}/../../proj/x`, `echo x > ${D}/sub/x`, `echo x > ${D}x/a`, `echo x > ${P}/scratchpad/x`, `echo x > ${root}/claude-501/-proj/bbbbbbbb-1111-4222-8333-bbbbbbbbbbbb/scratchpad/x`]) {
+      expect(v(cmd), cmd).toBe(askNow(cmd));
+    }
   });
   test("code-file targets stay a BLOCK, never relaxed", () => {
     expect(v(`echo x > ${D}/x.ts`)).toBe("block");
@@ -70,7 +69,7 @@ describe("one unsafe target or ambiguity keeps the old verdict", () => {
   });
   test("no scratchpad_dir, or an unusable one, keeps the old ask", () => {
     for (const bad of [null, "", "scratchpad", "/", "/tmp", `${D}/../..`, `${D}/./`, "/a b/c/d"]) {
-      expect(v(`echo x > ${D}/a`, bad), String(bad)).toBe("ask");
+      expect(v(`echo x > ${D}/a`, bad), String(bad)).toBe(askNow(`echo x > ${D}/a`));
     }
   });
 });
@@ -87,9 +86,7 @@ describe("links: command-created and pre-existing", () => {
     symlinkSync(join(P, "src", "a.txt"), join(D, "sym"));
     mkdirSync(join(D, "adir"));
     linkSync(join(P, "src", "a.txt"), join(D, "hard"));
-    expect(v(`echo x > ${D}/sym`)).toBe("ask");
-    expect(v(`echo x > ${D}/adir`)).toBe("ask");
-    expect(v(`echo x > ${D}/hard`)).toBe("ask");
+    for (const name of ["sym", "adir", "hard"]) expect(v(`echo x > ${D}/${name}`), name).toBe(askNow(`echo x > ${D}/${name}`));
   });
   test("existing regular file and a not-yet-created file pass", () => {
     writeFileSync(join(D, "reg.txt"), "");
@@ -141,8 +138,8 @@ describe("the window never makes a command more permissive than without its redi
     expect(v(`cmd >(tee ${P}/b) > ${D}/log`)).toBe("ask");
   });
   test("an operator the redirect scanner cannot see keeps asking", () => {
-    expect(v(`echo x > ${D}/a &> ${P}/b`)).toBe("ask");
-    expect(v(`echo x > ${D}/a >& ${P}/b`)).toBe("ask");
-    expect(v(`echo x > ${D}/a <> ${P}/b`)).toBe("ask");
+    for (const cmd of [`echo x > ${D}/a &> ${P}/b`, `echo x > ${D}/a >& ${P}/b`, `echo x > ${D}/a <> ${P}/b`]) {
+      expect(v(cmd), cmd).toBe(askNow(cmd));
+    }
   });
 });

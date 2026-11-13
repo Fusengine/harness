@@ -5,21 +5,28 @@ import { protectedPathGuard } from "./protected-path";
 import { bashWriteGuard } from "./bash-write";
 import { interfaceSeparationGuard } from "./interface-separation";
 import { installGuard } from "./install";
+import { gitFlowGuard } from "./git-flow";
+import { opaqueShellGuard } from "./opaque-shell";
+import { confirmRelayGuard } from "./confirm-relay";
 
 export * from "./context";
+export * from "./git-flow";
 export * from "./security";
 export * from "./protected-path";
 export * from "./bash-write";
 export * from "./interface-separation";
 export * from "./install";
 
-/** Ordered guard chain: critical/security + protected first, then writes/installs. */
+/** Ordered guard chain: git-flow blocks (an ask must never hide them), critical/security + protected, then writes/installs. */
 export const GUARDS: ReadonlyArray<Guard> = [
+  gitFlowGuard,
+  confirmRelayGuard,
   securityGuard,
   protectedPathGuard,
   bashWriteGuard,
   interfaceSeparationGuard,
   installGuard,
+  opaqueShellGuard,
 ];
 
 /** Block prompt returned when a guard or gate throws (fail-closed). */

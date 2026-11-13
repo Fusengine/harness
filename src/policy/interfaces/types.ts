@@ -10,6 +10,8 @@ export interface PolicyContext {
   command?: string;
   /** Claude Code `scratchpad_dir` (see GuardContext.scratchpadDir); undefined on every other host. */
   scratchpadDir?: string;
+  /** Payload cwd (see GuardContext.cwd). */
+  cwd?: string;
   /** Optional override for the SOLID max-lines limit. */
   maxLines?: number;
   /** Subagent type — `Explore`/`Plan` are exempt from the file-size gate. */

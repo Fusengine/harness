@@ -50,7 +50,8 @@ export const CASES: readonly Case[] = [
   c("ask-inst-brew", "brew install jq", "ask"),
   c("ask-inst-apt", "apt install curl", "ask"),
   c("ask-inst-bun", "bun add zod", "ask"),
-  c("ask-bw-redirect-txt", "echo hi > notes.txt", "ask"),
+  // Command output (not literal text: `echo hi > notes.txt` is refused since the literal-write block) keeps the ask.
+  c("ask-bw-redirect-txt", "prog hi > notes.txt", "ask"),
   c("ask-bw-tee", "tee output.log", "ask"),
   c("ask-bw-dd", "dd if=/dev/zero of=disk.img", "ask"),
   c("allow-ls", "ls -la /home", "allow"),

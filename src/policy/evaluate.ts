@@ -2,8 +2,9 @@ import { isFileSizeScoped, resolveSolidRefFramework } from "./file-size-scope";
 import { countLines, evaluateFileSize } from "./file-size";
 import { computeEditResultLines, computePatchResultLines } from "./edit-outcome";
 import { resolveMaxLines } from "../config/limits";
-import { matchPatterns, GIT_BLOCKED, RALPH_SAFE, isRalphMode } from "./patterns";
+import { matchGitPatterns, GIT_BLOCKED, RALPH_SAFE, isRalphMode } from "./patterns";
 import { runGuards } from "./guards";
+import { sshToShellGuard } from "./guards/ssh-to-shell";
 import { isSingleCommand, buildNeverApprovalPrompt, NEVER_SAFE, isSafePushForm } from "./never-approval";
 import { evaluateGitGates } from "./git-gates";
 import type { PolicyContext, PolicyResult } from "./interfaces/types";
@@ -16,7 +17,19 @@ export type { PolicyContext, PolicyResult } from "./interfaces/types";
  * their harness's native response (Claude `permissionDecision`, etc.).
  */
 export function evaluate(ctx: PolicyContext): PolicyResult {
+  const base = evaluateBase(ctx);
+  if (base.decision !== "allow") return base;
+  // Only ever ADDS an ask: consulted after every other policy, and only when they would all allow.
+  const ask = sshToShellGuard(ctx);
+  return ask ? { decision: "deny", message: ask.reason, prompt: ask } : base;
+}
+
+/** The policies that existed before the ssh-to-shell ask: guards, git gates, file-size. */
+function evaluateBase(ctx: PolicyContext): PolicyResult {
   const guard = runGuards(ctx);
+  // A guard's ask (e.g. `eval`) must not hide a destructive-git block further down the chain.
+  const destructive = guard?.kind === "ask" ? evaluateGitGates(ctx.command, false) : null;
+  if (destructive?.prompt?.kind === "block") return destructive;
   if (guard) return { decision: "deny", message: guard.reason, prompt: guard };
   // Ralph mode (opt-in via RALPH_MODE) exempts the SAFE git commands from the git
   // block/ask gates for autonomous runs — parity git-guard.py:48-51. Destructive
@@ -32,7 +45,7 @@ export function evaluate(ctx: PolicyContext): PolicyResult {
   // none of which GIT_BLOCKED catches (that gate only covers --force). RALPH_MODE
   // takes priority (ralphSafe already silent-allows above this) — its own path
   // stays on RALPH_SAFE, unaffected by this push exemption.
-  const neverExempt = !ralphSafe && !!ctx.neverApproval && !!cmd && !matchPatterns(cmd, GIT_BLOCKED) && isSingleCommand(cmd) && NEVER_SAFE.some((s) => cmd.startsWith(s)) && isSafePushForm(cmd);
+  const neverExempt = !ralphSafe && !!ctx.neverApproval && !!cmd && !matchGitPatterns(cmd, GIT_BLOCKED) && isSingleCommand(cmd) && NEVER_SAFE.some((s) => cmd.startsWith(s)) && isSafePushForm(cmd);
   if (neverExempt && cmd) {
     const prompt = buildNeverApprovalPrompt(cmd);
     return { decision: "warn", message: prompt.reason, prompt };

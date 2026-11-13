@@ -4,6 +4,7 @@
  * from the source guard, now as an explicit alternation instead of an
  * accidental substring match (see {@link GIT_BLOCKED}).
  */
+import { expand } from "./effective-segments";
 
 /**
  * Token-boundary suffix for a destructive flag: only whitespace, `=`, or
@@ -59,6 +60,18 @@ export const PROJECT_INSTALL: ReadonlyArray<RegExp> = [
 /** True when `cmd` matches any pattern in `patterns`. */
 export function matchPatterns(cmd: string, patterns: ReadonlyArray<RegExp>): boolean {
   return patterns.some((re) => re.test(cmd));
+}
+
+/**
+ * True when `cmd` matches a git pattern, either as written or as a command it
+ * really runs behind a wrapper (`git -C x push -f`, `sh -c 'git reset --hard'`,
+ * `cd x && git push -f`…): the patterns are also matched against each git
+ * command found by {@link expand} in canonical form. Never weaker than
+ * {@link matchPatterns}.
+ */
+export function matchGitPatterns(cmd: string, patterns: ReadonlyArray<RegExp>): boolean {
+  if (matchPatterns(cmd, patterns)) return true;
+  return expand(cmd).items.some((item) => item.verb === "git" && matchPatterns(item.text, patterns));
 }
 
 /** Git commands exempt from confirmation when Ralph mode is on (parity git-guard.py RALPH_SAFE). */

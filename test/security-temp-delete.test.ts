@@ -50,8 +50,10 @@ describe("narrowed to ask: every target strictly inside a system temp dir", () =
   ])("%s -> ask", (cmd) => {
     expect(verdict(cmd)).toBe("ask");
   });
-  test("trash exemption is exactly main's: lifted block still asks, untouched commands stay exempt", () => {
-    expect(verdict("rm -i /var/tmp/trash")).toBe("allow");
+  test("trash exemption: only a delete INSIDE a trash dir is exempt (a path merely named trash is not); lifted block still asks", () => {
+    expect(verdict("rm -i /var/tmp/trash")).toBe("ask");
+    expect(verdict("rm -i /var/tmp/trash/x")).toBe("ask");
+    expect(verdict("rm -i /var/tmp/.Trash/x")).toBe("allow");
     expect(verdict("rm -rf /var/tmp/trash")).toBe("ask");
     expect(verdict("rm -rf /var/log/trash")).toBe("block");
   });

@@ -25,7 +25,9 @@ test("shared shell verdict matrix stays stable across Claude, Codex, Cursor, and
   const cases = [
     { command: "rg '->between' fichier.php", expected: ["allow", "allow", "allow", "allow"] },
     { command: "echo x > result.ts", expected: ["deny", "deny", "deny", "deny"] },
-    { command: "echo x > result.log", expected: ["ask", "deny", "deny", "deny"] },
+    // Literal text through the shell is refused everywhere (was ask on Claude; Codex/Cursor/Kimi already rendered ask as deny).
+    { command: "echo x > result.log", expected: ["deny", "deny", "deny", "deny"] },
+    { command: "prog > result.log", expected: ["ask", "deny", "deny", "deny"] },
     { command: 'bun -e \'require("fs").writeFileSync("src/x.ts","1")\'', expected: ["deny", "deny", "deny", "deny"] },
     { command: 'bun -e \'require("fs").writeFileSync("out.json","1")\'', expected: ["ask", "deny", "deny", "deny"] },
     { command: "bun - <<'EOF'\nrequire(\"fs\").writeFileSync(\"src/x.ts\",\"1\")\nEOF", expected: ["deny", "deny", "deny", "deny"] },

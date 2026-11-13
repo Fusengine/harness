@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bashWriteGuard } from "../src/policy/guards/bash-write";
+import { askNow } from "./helpers/redir-corpus";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "fh-amp-")));
 const D = join(root, "claude-501", "-proj", "aaaaaaaa-1111-4222-8333-bbbbbbbbbbbb", "scratchpad");
@@ -43,14 +44,13 @@ describe("ampersand redirects proven inside the scratchpad get the `>` verdict",
 describe("anything not proven keeps the amp verdict", () => {
   test("project, sibling, depth-2 and traversal targets ask", () => {
     for (const cmd of [`echo x &> ${P}/b`, `echo x &>> ${P}/b`, `echo x >& ${P}/b`, `echo x &> ${D}/sub/a`, `echo x &> ${D}/../x`, `echo x &> ${D}x/a`]) {
-      expect(v(cmd), cmd).toBe("ask");
+      expect(v(cmd), cmd).toBe(askNow(cmd));
     }
   });
   test("one unsafe target among several asks, either order", () => {
-    expect(v(`echo x &> ${D}/a &> ${P}/b`)).toBe("ask");
-    expect(v(`echo x &> ${P}/b &> ${D}/a`)).toBe("ask");
-    expect(v(`echo x &> ${D}/a > ${P}/b`)).toBe("ask");
-    expect(v(`echo x > ${D}/a >& ${P}/b`)).toBe("ask");
+    for (const cmd of [`echo x &> ${D}/a &> ${P}/b`, `echo x &> ${P}/b &> ${D}/a`, `echo x &> ${D}/a > ${P}/b`, `echo x > ${D}/a >& ${P}/b`]) {
+      expect(v(cmd), cmd).toBe(askNow(cmd));
+    }
   });
   test("zsh-only and malformed operators stay asks", () => {
     for (const cmd of [`echo x >>& ${D}/a`, `echo x >&| ${D}/a`, `echo x >&! ${D}/a`, `echo x &&> ${D}/a`, `echo x &>| ${D}/a`, `echo x &2> ${D}/a`]) {
@@ -69,12 +69,12 @@ describe("anything not proven keeps the amp verdict", () => {
     expect(v(`S=${D}; echo x >& $S/x.py`)).toBe("block");
   });
   test("no usable scratchpad_dir keeps the ask", () => {
-    for (const bad of [null, "", "/tmp", `${D}/../..`]) expect(v(`echo x &> ${D}/a`, bad), String(bad)).toBe("ask");
+    for (const bad of [null, "", "/tmp", `${D}/../..`]) expect(v(`echo x &> ${D}/a`, bad), String(bad)).toBe(askNow(`echo x &> ${D}/a`));
   });
   test("a symlink at the target keeps the ask", () => {
     symlinkSync(join(P, "f.txt"), join(D, "sym"));
-    expect(v(`echo x &> ${D}/sym`)).toBe("ask");
-    expect(v(`echo x >& ${D}/sym`)).toBe("ask");
+    expect(v(`echo x &> ${D}/sym`)).toBe(askNow(`echo x &> ${D}/sym`));
+    expect(v(`echo x >& ${D}/sym`)).toBe(askNow(`echo x >& ${D}/sym`));
   });
 });
 

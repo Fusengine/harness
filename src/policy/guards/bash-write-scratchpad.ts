@@ -1,18 +1,19 @@
 import { parseOutputRedirect } from "./bash-write-redirect-op";
-import { isFreshOrRegular, isPlainComponent, scratchpadDirOf } from "./bash-write-scratchpad-target";
+import { isFreshOrRegular, isPlainComponent, scratchpadDirOf, type TempRoot } from "./bash-write-scratchpad-target";
 import { scratchpadVarResolves } from "./bash-write-scratchpad-var";
 import { parseStatements, type Statement } from "./bash-write-scratchpad-words";
 
 const ESCAPE = /[.*+?^${}()|[\]\\]/g;
 const BOUNDARY = "(?=$|[\\s;&|<>)])";
-const MAX_LENGTH = 4096;
+/** Longest command (in characters) a scratchpad/temp window will inspect; longer commands keep the old verdict. */
+export const MAX_LENGTH = 4096;
 /** Fd duplication (`2>&1`, `>&2`, `>&-`): no file involved. */
 const DUP = new RegExp(`^&(?:\\d+|-)${BOUNDARY}`);
 const DEV_NULL = new RegExp(`^(["']?)/dev/null\\1${BOUNDARY}`);
 /** Printable ASCII, tab and newline only: JS `\s` and the shell disagree on every other byte. */
-const PLAIN_TEXT = /^[\x20-\x7e\t\n]*$/;
+export const PLAIN_TEXT: RegExp = /^[\x20-\x7e\t\n]*$/;
 /** Comments, command/process substitution, arithmetic, heredocs and any `${` other than `${S}` hide or rebind things. */
-const OPAQUE_SYNTAX = /#|\\|\(|`|\$\(|\$\{(?!S\})|\(\(|<<|[<>]\(|=\(/;
+export const OPAQUE_SYNTAX: RegExp = /#|\\|\(|`|\$\(|\$\{(?!S\})|\(\(|<<|[<>]\(|=\(/;
 
 /**
  * Match one redirect target word at `pos`: only `<dir>/<name>`, `$S/<name>`
@@ -20,21 +21,28 @@ const OPAQUE_SYNTAX = /#|\\|\(|`|\$\(|\$\{(?!S\})|\(\(|<<|[<>]\(|=\(/;
  * around a variable), followed by a word boundary.
  * @returns The end index and whether it used the variable, or null.
  */
-function matchTarget(cmd: string, pos: number, dir: string): { end: number; variable: boolean } | null {
-  const dirPattern = dir.replace(ESCAPE, "\\$&");
-  const word = new RegExp(`^(["']?)(?:${dirPattern}|(\\$S|\\$\\{S\\}))/([^\\s;&|<>)"']+)\\1${BOUNDARY}`).exec(cmd.slice(pos));
-  if (!word) return null;
-  const [text, quote, variable, name] = word;
-  if (name === undefined || !isPlainComponent(name) || !isFreshOrRegular(dir, name)) return null;
-  if (variable !== undefined && quote === "'") return null;
-  return { end: pos + text.length, variable: variable !== undefined };
+function matchTarget(cmd: string, pos: number, dir: string | null, temps: readonly TempRoot[]): { end: number; variable: boolean } | null {
+  const forms = [...(dir === null ? [] : [{ text: dir, physical: dir, scratch: true }]), ...temps.flatMap((t) => t.names.map((text) => ({ text, physical: t.physical, scratch: false })))];
+  for (const form of forms) {
+    const dirPattern = form.text.replace(ESCAPE, "\\$&");
+    const alt = form.scratch ? `${dirPattern}|(\\$S|\\$\\{S\\})` : dirPattern;
+    const word = new RegExp(`^(["']?)(?:${alt})/([^\\s;&|<>)"']+)\\1${BOUNDARY}`).exec(cmd.slice(pos));
+    if (!word) continue;
+    const [text, quote, ...rest] = word;
+    const name = rest[rest.length - 1];
+    const variable = form.scratch ? rest[0] : undefined;
+    if (name === undefined || !isPlainComponent(name) || !isFreshOrRegular(form.physical, name)) return null;
+    if (variable !== undefined && quote === "'") return null;
+    return { end: pos + text.length, variable: variable !== undefined };
+  }
+  return null;
 }
 
 /** Operators the window accepts, as `parseOutputRedirect` spells them: `>`, `>>`, `N>`, `N>>`, `&>`, `&>>`, `>&file`. `>|`, `>>&`, `&2>` and the rest keep the old verdict. */
 const OPERATOR = /^(?:\d*>{1,2}|&>{1,2}|>&)$/;
 
 /** Walk every `>` of the command; returns the number of file redirects, whether one used `$S` and the indexes of the `&` that belong to accepted redirect operators, or null if any `>` is not a proven safe form. */
-function scanRedirects(cmd: string, dir: string): { files: number; variable: boolean; amps: number[] } | null {
+export function scanRedirects(cmd: string, dir: string | null, temps: readonly TempRoot[] = []): { files: number; variable: boolean; amps: number[] } | null {
   let files = 0;
   let variable = false;
   const amps: number[] = [];
@@ -53,7 +61,7 @@ function scanRedirects(cmd: string, dir: string): { files: number; variable: boo
     let pos = opEnd + 1;
     while (cmd[pos] === " " || cmd[pos] === "\t") pos++;
     const devNull = DEV_NULL.exec(cmd.slice(pos));
-    const target = devNull ? { end: pos + devNull[0].length, variable: false } : matchTarget(cmd, pos, dir);
+    const target = devNull ? { end: pos + devNull[0].length, variable: false } : matchTarget(cmd, pos, dir, temps);
     if (target === null) return null;
     if (!devNull) files++;
     variable ||= target.variable;

@@ -1,7 +1,11 @@
 import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
+import { cpMoveCommands } from "./bash-write-cpmv";
+import { askFileWrite, blockCodeWrite, strictest } from "./bash-write-prompts";
 import { hasSafeWriteTarget, isSafeCommandTarget, isSafeWritePath } from "./bash-write-safe-paths";
 import { shellFileWriteRedirects } from "./bash-write-redirects";
+import { literalWriteBlock } from "./bash-write-literal";
+import { commandOutputOnlyInTemp } from "./bash-write-output-window";
 import { redirectsOnlyInScratchpad } from "./bash-write-scratchpad";
 import { unquotedShellText } from "./bash-write-unquoted";
 import {
@@ -11,13 +15,6 @@ import {
 } from "./bash-write-patterns";
 
 export { ASK_WRITERS, CODE_MUTATORS, CODE_REDIRECT, FILE_REDIRECT, SAFE_PREFIXES, SESSION_STATE_FRAGMENT } from "./bash-write-patterns";
-
-function blockCodeWrite(reason: string): Prompt {
-  return { kind: "block", title: "Bash write to code file", reason, actions: ["Use the Write/Edit tool instead"] };
-}
-function askFileWrite(reason: string, ruleId = "bash-write:file-write"): Prompt {
-  return { kind: "ask", ruleId, title: "Bash file write", reason, actions: ["Use the Write/Edit tool instead"] };
-}
 
 /**
  * Shared block/ask/allow verdict for an inline-script write-API match, used by
@@ -36,6 +33,17 @@ function inlineScriptVerdict(cmd: string, label: string): Prompt | null {
   }
   if (hasSafeWriteTarget(cmd)) return null;
   return askFileWrite(`${label} write operation detected. Authorize?`);
+}
+
+/**
+ * The Bash-write verdict: {@link baseBashWriteGuard} (the aa1d13c verdict, every rule above, unchanged) made
+ * only STRICTER by the cp/mv/install/ln proof (bash-write-cpmv.ts), which can only return a block for a PROVEN
+ * foreign-content write into a project code file. Combined in this one place (`strictest`), the result is never
+ * weaker than the base verdict.
+ */
+export function bashWriteGuard(ctx: GuardContext): Prompt | null {
+  if (ctx.tool !== "Bash" || !ctx.command) return null;
+  return strictest(baseBashWriteGuard(ctx), cpMoveCommands(ctx.command, ctx.cwd, ctx.scratchpadDir));
 }
 
 /**
@@ -74,7 +82,7 @@ function inlineScriptVerdict(cmd: string, label: string): Prompt | null {
  * DATA, never a real command position — those leaked into the anchors the
  * same way a quoted mention did.
  */
-export function bashWriteGuard(ctx: GuardContext): Prompt | null {
+export function baseBashWriteGuard(ctx: GuardContext): Prompt | null {
   if (ctx.tool !== "Bash" || !ctx.command) return null;
   const cmd: string = ctx.command;
   const stripped = cmd.trim();
@@ -126,8 +134,10 @@ export function bashWriteGuard(ctx: GuardContext): Prompt | null {
     // Narrow window: every redirect provably lands in the session scratchpad → no ask here; the later
     // stages (inline node/ruby, ASK_WRITERS) still run, so the command is never more permissive than
     // the same command without its redirects.
-    if (!redirectsOnlyInScratchpad(cmd, ctx.scratchpadDir)) {
-      return askFileWrite("Shell redirect to file detected. Authorize?", "bash-write:file-redirect");
+    // Same fall-through for command output (read-only producer) landing strictly in scratchpad / system temp;
+    // literal text written through the shell is refused outright (Write/Edit tool), anything else keeps the ask.
+    if (!redirectsOnlyInScratchpad(cmd, ctx.scratchpadDir) && !commandOutputOnlyInTemp(cmd, ctx.scratchpadDir)) {
+      return literalWriteBlock(cmd, ctx.cwd) ?? askFileWrite("Shell redirect to file detected. Authorize?", "bash-write:file-redirect");
     }
   }
 
@@ -149,7 +159,7 @@ export function bashWriteGuard(ctx: GuardContext): Prompt | null {
 
   const asker = ASK_WRITERS.find((a) => a.re.test(cmd));
   if (asker) {
-    return isSafeCommandTarget(cmd) ? null : askFileWrite(`${asker.desc} detected. Authorize?`);
+    return isSafeCommandTarget(cmd) ? null : literalWriteBlock(cmd, ctx.cwd) ?? askFileWrite(`${asker.desc} detected. Authorize?`);
   }
   return null;
 }

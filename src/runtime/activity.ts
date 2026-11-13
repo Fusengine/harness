@@ -4,6 +4,7 @@ import { classifyExplore } from "../freshness/explore-tools";
 import { docFramework } from "../freshness/query-framework";
 import { shellReadRefPaths } from "../policy/shell-read-refs";
 import { isAgentTool } from "./is-agent-tool";
+import { isCodexNativeWebTool } from "./codex-web-tool";
 
 /** A live tool-use, already normalized to `tool` + `input` by the adapter. */
 export interface ToolEvent {
@@ -45,7 +46,7 @@ function docSourceOf(tool: string): string | undefined {
   if (/context7/i.test(tool)) return "context7";
   if (/exa/i.test(tool)) return "exa";
   if (/browser_(fetch|crawl|serp)/i.test(tool)) return "fuse-browser";
-  if (tool === "WebSearch") return "websearch";
+  if (tool === "WebSearch" || isCodexNativeWebTool(tool)) return "websearch";
   if (tool === "WebFetch") return "webfetch";
   if (/^mcp__shadcn__/i.test(tool)) return "shadcn-mcp";
   if (/^mcp__gemini-design__/i.test(tool)) return "gemini-mcp";
@@ -68,7 +69,7 @@ export function activityFor(event: ToolEvent): Activity[] {
   // context7/exa/WebSearch/WebFetch AND fuse-browser (browser_fetch/crawl/serp_batch,
   // in RESEARCH_TOOLS since explore-tools.ts:38) all credit BOTH doc and research-expert.
   const docSource = docSourceOf(event.tool);
-  if (docSource) out.push({ kind: "doc", framework: docFramework(event.input, event.framework), sessionId: event.sessionId, source: docSource, ts: event.now });
+  if (docSource) out.push({ kind: "doc", framework: docFramework(event.input, event.framework, event.tool), sessionId: event.sessionId, source: docSource, ts: event.now });
 
   // AgentSwarm is Kimi Code's batch launcher — same `subagent_type` identity field.
   if (isAgentTool(event.tool)) {

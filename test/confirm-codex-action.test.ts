@@ -53,7 +53,7 @@ test("argv/string transport is canonical and a different cwd invalidates", async
 });
 
 test("diagnostics expose stable fields and missing tool_use_id is typed", async () => {
-  const home = temp("confirm-home"), cwd = temp("confirm-cwd"), s = sid("diagnostic"), command = "echo log > out.txt";
+  const home = temp("confirm-home"), cwd = temp("confirm-cwd"), s = sid("diagnostic"), command = "prog log > out.txt";
   const opts: HandleOptions = { now: 1000, cwd, home }, denied = await handleHook("codex", pre(s, command, "tool-a", cwd), { now: 1000, cwd, home });
   expect(denied.stdout).toContain("rule ID: bash-write:file-redirect");
   expect(denied.stdout).toContain(`canonical command: ${command}`);

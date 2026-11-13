@@ -1,15 +1,18 @@
 import { expect, test } from "bun:test";
 import { bashWriteGuard } from "../src/policy/guards/bash-write";
+import { REAL_CWD } from "./helpers/real-cwd";
 
-const verdict = (command: string): string => bashWriteGuard({ tool: "Bash", command })?.kind ?? "allow";
+const verdict = (command: string): string => bashWriteGuard({ tool: "Bash", command, cwd: REAL_CWD })?.kind ?? "allow";
 
 // Was pinned to "allow" (the bug: `&>` slipped past the guard while `>` asks). See bash-write-amp-redirect.test.ts.
 test("&> is a file write like >", () => {
-  expect(verdict("echo x &> out.txt")).toBe("ask");
+  expect(verdict("prog &> out.txt")).toBe("ask");
+  expect(verdict("echo x &> out.txt")).toBe("block"); // literal text: Write/Edit tool instead
 });
 
 test("detects Bash noclobber override >|", () => {
-  expect(verdict("echo x >| out.txt")).toBe("ask");
+  expect(verdict("prog >| out.txt")).toBe("ask");
+  expect(verdict("echo x >| out.txt")).toBe("block"); // literal text: Write/Edit tool instead
   expect(verdict("echo x >| out.ts")).toBe("block");
 });
 

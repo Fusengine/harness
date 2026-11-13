@@ -14,6 +14,8 @@ import { commandContexts } from "../../policy/motion/command-context";
 import { projectContractViolation } from "../../policy/motion/project-guard";
 import { findSensitive, loadBannedTerms } from "../../policy/motion/sensitive";
 import { respond } from "../respond";
+import { coreGuardsWired } from "../core-guards-wired";
+import { confirmRelayViolation } from "../../policy/confirm-relay";
 import type { HandleOptions } from "../handle-types";
 import type { NormalizedEvent } from "../normalize";
 import { canonicalFilePath } from "../prd/prd-canon";
@@ -82,7 +84,8 @@ export function motionPre(id: string, call: MotionCall, opts: HandleOptions, res
   if (key) return respond(id, key, respondAs);
   const self = selfApprovalViolation(tool, filePath, command, cwd, home) ?? patchSelfApproval(event, cwd, home);
   if (self) return respond(id, self, respondAs);
-  const forged = approvalForgeryViolation(tool, command, event.input);
+  // core-guards (confirmRelayGuard) already refuses a CONFIRM relay on a host where it is active: abstain from that part so the owner sees one deny, not two.
+  const forged = approvalForgeryViolation(tool, command, event.input, coreGuardsWired(id, process.env, home) && confirmRelayViolation(tool, command) !== null);
   if (forged) return respond(id, forged, respondAs);
   if (command && tool === "Bash") {
     for (const [segment, directory] of commandContexts(command, cwd, home)) {

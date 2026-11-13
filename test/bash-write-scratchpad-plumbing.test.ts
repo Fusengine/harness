@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { guard } from "../src/adapters/claude";
@@ -41,7 +41,8 @@ describe("scratchpad_dir plumbing (Claude Code only)", () => {
 
   test("end to end: claude-code with scratchpad_dir allows, without it asks", async () => {
     expect(await decision("claude-code", { scratchpad_dir: D })).toBe("allow");
-    expect(await decision("claude-code", {})).toBe("ask");
+    // Without the window the command is a fully literal write: refused outright (was an ask).
+    expect(await decision("claude-code", {})).toBe("deny");
   });
 
   test("end to end: the same field on other hosts changes nothing", async () => {
@@ -50,8 +51,18 @@ describe("scratchpad_dir plumbing (Claude Code only)", () => {
   });
 
   test("a payload scratchpad_dir does not relax a project-file redirect", async () => {
+    mkdirSync(join(root, "proj"), { recursive: true });
     const cmd = { tool_input: { command: `echo x > ${root}/proj/notes.log` } };
-    expect(await decision("claude-code", { scratchpad_dir: D, ...cmd })).toBe("ask");
+    expect(await decision("claude-code", { scratchpad_dir: D, ...cmd })).toBe("deny");
+  });
+
+  test("payload cwd resolves relative literal targets; a /dev cwd or no cwd keeps the ask", async () => {
+    mkdirSync(join(root, "proj"), { recursive: true });
+    symlinkSync("/dev", join(root, "devlink"));
+    const cmd = { tool_input: { command: "echo x > notes.log" } };
+    expect(await decision("claude-code", { ...cmd, cwd: join(root, "proj") })).toBe("deny");
+    expect(await decision("claude-code", { ...cmd, cwd: join(root, "devlink") })).toBe("ask");
+    expect(await decision("claude-code", { ...cmd, cwd: undefined })).toBe("ask");
   });
 
   test("legacy claude guard() adapter honours the field too", () => {

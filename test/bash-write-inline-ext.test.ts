@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import { bashWriteGuard } from "../src/policy/guards/bash-write";
 import type { GuardContext } from "../src/policy/guards/context";
+import { REAL_CWD } from "./helpers/real-cwd";
 
 /**
  * Challenger-measured bypass #9 closures (2026-09-05) on top of
@@ -13,7 +14,7 @@ import type { GuardContext } from "../src/policy/guards/context";
  * ceiling) to stay under the 200-line SOLID ceiling.
  */
 
-const cmd = (command: string): GuardContext => ({ tool: "Bash", command });
+const cmd = (command: string): GuardContext => ({ tool: "Bash", command, cwd: REAL_CWD });
 
 // Item 1: perl `-E` clusters the same way as `-e` (perlrun clustering rule).
 
@@ -79,6 +80,7 @@ test("redirect to an upper-case .TS extension blocks", () => {
   expect(bashWriteGuard(cmd("echo 1 > a.TS"))?.kind).toBe("block");
 });
 
-test("witness: redirect to a non-code upper-case extension still asks", () => {
-  expect(bashWriteGuard(cmd("echo 1 > a.TXT"))?.kind).toBe("ask");
+test("witness: redirect to a non-code upper-case extension is not a code block (ask; literal text -> block with the Write/Edit message)", () => {
+  expect(bashWriteGuard(cmd("prog > a.TXT"))?.kind).toBe("ask");
+  expect(bashWriteGuard(cmd("echo 1 > a.TXT"))?.title).toBe("Bash write of literal text");
 });

@@ -4,7 +4,7 @@ import { existingLineCounts, isApexScoped } from "./gate-helpers";
 import { FAIL_CLOSED } from "../policy/guards";
 import { loadTrack } from "../tracking/store";
 import { dryGate } from "./dry";
-import { preCommitGate } from "./precommit";
+import { preCommitGate, usableCwd } from "./precommit";
 import { modularGate } from "./modular";
 import { frameworkSkillGate } from "./framework-skill-gate";
 import { reconcileRefReadsFromTranscript } from "../freshness/ref-evidence";
@@ -90,15 +90,20 @@ function promptRank(prompt: Prompt): number {
 export async function runGates(input: GateInput): Promise<Prompt | null> {
   // Pre-commit lint hard-block runs FIRST: evaluate()'s GIT_ASK branch would
   // otherwise short-circuit a `git commit` before the linters get to veto it.
-  const precommit = preCommitGate(input.tool, input.command, input.cwd);
-  if (precommit) return precommit;
+  const precommit = preCommitGate(input.tool, input.command, usableCwd(input.payloadCwd) ?? input.cwd);
+  if (precommit?.kind === "block") return precommit;
+  // A skipped-linter warning (`inform`) must not short-circuit the other gates: it only surfaces when they all allow.
+  return (await runStatefulGates(input)) ?? precommit;
+}
+
+async function runStatefulGates(input: GateInput): Promise<Prompt | null> {
   // Hook-managed paths: absolute deny on ALL extensions, BEFORE the code-ext/exempt filters (parity enforce-apex-phases.ts:48-52 — isApexScoped never routes a non-code/exempt path to the guard).
   const protectedDeny = protectedPathGate(input.tool, input.filePath);
   if (protectedDeny) return protectedDeny;
   const { raw: existingLines, code: existingCodeLines, content: existingContent } = existingLineCounts(input.filePath);
   let quick: PolicyResult;
   try {
-    quick = evaluate({ tool: input.tool, filePath: input.filePath, content: input.content, command: input.command, scratchpadDir: input.scratchpadDir, agentType: input.agentType, existingLines, existingContent, oldString: input.oldString, isReplaceAll: input.isReplaceAll, neverApproval: input.neverApproval });
+    quick = evaluate({ tool: input.tool, filePath: input.filePath, content: input.content, command: input.command, scratchpadDir: input.scratchpadDir, cwd: input.payloadCwd, agentType: input.agentType, existingLines, existingContent, oldString: input.oldString, isReplaceAll: input.isReplaceAll, neverApproval: input.neverApproval });
   } catch {
     return FAIL_CLOSED;
   }
