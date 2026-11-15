@@ -50,7 +50,7 @@ function evaluateBase(ctx: PolicyContext): PolicyResult {
     const prompt = buildNeverApprovalPrompt(cmd);
     return { decision: "warn", message: prompt.reason, prompt };
   }
-  const gitGate = evaluateGitGates(ctx.command, ralphSafe);
+  const gitGate = evaluateGitGates(ctx.command, ralphSafe, ctx.cwd);
   if (gitGate) return gitGate;
   if (ctx.filePath && isFileSizeScoped(ctx.filePath) && ctx.agentType !== "Explore" && ctx.agentType !== "Plan") {
     const incoming = ctx.content !== undefined ? countLines(ctx.content) : 0;

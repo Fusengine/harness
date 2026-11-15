@@ -14,6 +14,18 @@ export function isAgentKey(agentId: unknown): agentId is string {
   return typeof agentId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(agentId) && agentId !== "__proto__";
 }
 
+const GATE_EXEMPT_AGENTS = /(sniper|sniper-faster|explore-codebase|research-expert|claude-code-guide|Explore|Plan)/;
+
+/**
+ * Agent types SubagentStop never holds (validators/readers). Their writes are NOT handed to the
+ * sub-agent gate, so the lead's Stop keeps judging them (a sniper fix is still verified).
+ * @param agentType - The payload `agent_type`.
+ * @returns Whether SubagentStop skips this agent.
+ */
+export function isGateExemptAgent(agentType: unknown): boolean {
+  return typeof agentType === "string" && GATE_EXEMPT_AGENTS.test(agentType);
+}
+
 /**
  * Files the PostToolUse hooks recorded for this `agent_id` (hook payloads fired inside a
  * sub-agent carry it). `null` when the id is absent/invalid or nothing was tagged, so the
@@ -26,6 +38,42 @@ export function taggedFilesOf(changes: SessionChanges | undefined, agentId: unkn
   if (!isAgentKey(agentId) || !Object.hasOwn(changes?.agentFiles ?? {}, agentId)) return null;
   const list = changes?.agentFiles?.[agentId];
   return list && list.length > 0 ? list : null;
+}
+
+/**
+ * The files the stopping session itself wrote (what its Stop receipt gate must judge). A stop
+ * carrying a valid `agent_id` is held for that agent's tagged files only; a stop without one
+ * (the lead) for every session file EXCEPT those written only by a sub-agent that the Stop
+ * payload's `background_tasks` lists as still running (its own SubagentStop gate judges it, and
+ * the lead's next Stop catches it once it finished). Fail-safe: an agent is excluded only when
+ * positively reported running, so a finished, unknown or never-reported agent's unverified code
+ * stays in the lead's gate. Legacy state without `leadFiles` keeps the session-wide list.
+ * @param changes - The persisted session `changes` block.
+ * @param agentId - The Stop payload `agent_id` (absent for the lead).
+ * @param backgroundTasks - The Stop payload `background_tasks` (documented: `{id, type, status}`; a subagent's `id` is its `agent_id`).
+ * @returns The stopping session's own modified files.
+ */
+export function ownFilesOf(changes: SessionChanges | undefined, agentId: unknown, backgroundTasks?: unknown): string[] {
+  if (isAgentKey(agentId)) return taggedFilesOf(changes, agentId) ?? [];
+  if (!changes?.leadFiles) return changes?.modifiedFiles ?? [];
+  const running = new Set(runningAgentIds(backgroundTasks));
+  const own = new Set(changes.leadFiles);
+  const held = new Set<string>();
+  for (const [agent, files] of Object.entries(changes.agentFiles ?? {})) {
+    if (running.has(agent)) for (const f of files) held.add(f);
+  }
+  return (changes.modifiedFiles ?? []).filter((f) => own.has(f) || !held.has(f));
+}
+
+/** `agent_id`s of the sub-agents/teammates the Stop payload reports as running (anything else counts as not running). */
+function runningAgentIds(backgroundTasks: unknown): string[] {
+  if (!Array.isArray(backgroundTasks)) return [];
+  const ids: string[] = [];
+  for (const t of backgroundTasks as unknown[]) {
+    const e = t as { id?: unknown; type?: unknown; status?: unknown } | null;
+    if (e && (e.type === "subagent" || e.type === "teammate") && e.status === "running" && isAgentKey(e.id)) ids.push(e.id);
+  }
+  return ids;
 }
 
 /** Tools whose `input.file_path`/`notebook_path` names a file the agent authored. */

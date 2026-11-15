@@ -10,6 +10,8 @@ export interface GuardContext {
   scratchpadDir?: string;
   /** Absolute cwd from the host payload (where the shell starts); undefined when the host sent none. Only the Bash literal-write block resolves relative targets against it. */
   cwd?: string;
+  /** Claude `agent_id` when the tool-use comes from a sub-agent: nobody answers an `ask` there, so some asks become a block with instructions. */
+  agentId?: string;
 }
 
 /** A single guard: returns a blocking/asking Prompt, or null to continue. */

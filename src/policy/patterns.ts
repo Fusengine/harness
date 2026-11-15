@@ -42,6 +42,9 @@ export const GIT_ASK: ReadonlyArray<RegExp> = [
   /git push/, /git checkout/, /git reset/, /git rebase/, /git merge/,
   /git stash/, /git clean/, /git rm/, /git mv/, /git restore/,
   /git revert/, /git cherry-pick/, /git commit/, /git add/, /git branch -d/,
+  // Pointing core.hooksPath elsewhere turns every later (now silent) commit into a hook-skipping one, like --no-verify.
+  // Same segment, whole `git` word: `cat .git/config | grep core.hooksPath` or `echo digit core.hooksPath` are not git config.
+  /\bgit\b[^;&|\n]*core\.hookspath/i,
 ];
 
 /** System-level package installs (need confirmation). */

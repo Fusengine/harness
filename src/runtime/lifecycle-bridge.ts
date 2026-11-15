@@ -68,7 +68,7 @@ export async function postEditContext(scope: PluginScope, event: NormalizedEvent
   if (scope !== "core" || !event.filePath) return "";
   if (event.tool === "Read") return autoDocumentRead(event.filePath, now, id);
   if (event.tool !== "Write" && event.tool !== "Edit") return "";
-  const sniper = trackSessionChanges(event.sessionId, event.filePath, undefined, now, { agentId: event.agentId, cwd: event.cwd ?? cwd });
+  const sniper = trackSessionChanges(event.sessionId, event.filePath, undefined, now, { agentId: event.agentId, agentType: event.agentType, cwd: event.cwd ?? cwd });
   const lint = postEditTypescript(event.filePath);
   if (!sniper || !lint) return sniper || lint;
   return contextResponse("PostToolUse", `${additionalContextOf(sniper)}\n\n${additionalContextOf(lint)}`);

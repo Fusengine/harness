@@ -17,8 +17,8 @@ const NOT_CREATING = new Set(["-d", "-D", "--delete", "-l", "--list", "-a", "--a
 const RENAMING = new Set(["-m", "-M", "--move", "-c", "-C", "--copy"]);
 /** `git branch` long flags whose value is the next word. */
 const VALUE_FLAGS = new Set(["--sort", "--format", "--abbrev", "--color", "--column", "--set-upstream-to", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at"]);
-/** Names a rename may target without following the feature-branch rule (the default branches). */
-const DEFAULT_BRANCHES = new Set(["main", "master", "develop", "production"]);
+/** The protected branches: a rename may target them without following the feature-branch rule, and a commit on one keeps asking. */
+export const PROTECTED_BRANCHES: ReadonlySet<string> = new Set(["main", "master", "develop", "production"]);
 const CREATE_FLAGS: Record<string, string[]> = { checkout: ["-b", "-B"], switch: ["-c", "-C", "--create", "--force-create"] };
 
 /**
@@ -58,12 +58,12 @@ export function createdBranches(argv: readonly string[]): string[] {
   if (createFlags) {
     return args.flatMap((a, i) => {
       const value = a.startsWith("--create=") ? a.slice(9) : createFlags.includes(a) ? args[i + 1] : undefined;
-      return value !== undefined && !value.startsWith("-") && !DEFAULT_BRANCHES.has(value) ? [value] : [];
+      return value !== undefined && !value.startsWith("-") && !PROTECTED_BRANCHES.has(value) ? [value] : [];
     });
   }
   if (sub !== "branch") return [];
   const { flags, positional } = branchFlags(args);
-  if ([...flags].some((f) => RENAMING.has(f))) return positional.slice(-1).filter((n) => !DEFAULT_BRANCHES.has(n));
+  if ([...flags].some((f) => RENAMING.has(f))) return positional.slice(-1).filter((n) => !PROTECTED_BRANCHES.has(n));
   if ([...flags].some((f) => NOT_CREATING.has(f))) return [];
   return positional.slice(0, 1);
 }

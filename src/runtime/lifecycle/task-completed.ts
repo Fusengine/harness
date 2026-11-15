@@ -11,6 +11,7 @@ import { freshReceiptFromFile, verifiedAtFromFile } from "../../tracking/receipt
 import { projectStateDir } from "../project-state-dir";
 import type { SessionChanges } from "./code-edit-time";
 import { projectCodeFiles } from "./project-code";
+import { isAgentKey, ownFilesOf } from "./agent-files";
 import { receiptHint } from "./receipt-hint";
 import { CODE_EXTENSIONS } from "./code-extensions";
 import { stopNoticeOnce, stopReceiptDue, stopSolidMessage, stopSolidResponse } from "./stop-notice";
@@ -76,7 +77,7 @@ function collectViolations(files: string[], max: number): string[] {
  * Handle TaskCompleted (ports `task-completed/validate-task-solid.py` + the
  * receipt gate); also reused verbatim for Codex's `Stop` via {@link stopCore}
  * (Codex never emits `TaskCompleted`) — `event` stamps the real hook name.
- * @param payload - The TaskCompleted/Stop payload (`task_id`, `task_subject`, `session_id`).
+ * @param payload - The TaskCompleted/Stop payload (`task_id`, `task_subject`, `session_id`, `cwd`; Stop: `agent_id` when a sub-agent stops).
  * @param event - The hook event name to stamp on the SOLID-violation response (default `TaskCompleted`).
  * @param id - Harness adapter id (Stop only: shapes the once-per-session notice; TaskCompleted output is unchanged).
  * @returns The native hook stdout, or `""` when the session is clean.
@@ -85,19 +86,27 @@ export function validateTaskSolid(payload: Record<string, unknown>, home: string
   const sid = sanitizeSessionId(payload.session_id ?? "unknown");
   if (!sid) return "";
   const changes = loadSessionState(sid, home).changes as Changes | undefined;
+  const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : undefined;
   // Real project code only (never session-scratchpad / $TMPDIR / out-of-root probes) — every check below judges this list.
-  const files = projectCodeFiles(changes?.modifiedFiles ?? [], typeof payload.cwd === "string" ? payload.cwd : undefined);
+  const files = projectCodeFiles(changes?.modifiedFiles ?? [], payloadCwd);
   const editedAt = changes?.editedAt ?? {};
   if (files.length === 0) return "";
   const max = resolveMaxLines();
   const violations = collectViolations(files, max);
-  const cwd = typeof payload.cwd === "string" ? payload.cwd : process.cwd();
+  const cwd = payloadCwd ?? process.cwd();
   if (event === "Stop") {
     // Stop runs every turn over the same session file list. Receipt refusal: periodic
     // (lessons-reminder cadence) until a passing receipt lands. SOLID: once, re-armed on change.
     if (violations.length === 0) {
-      const verdict = receiptGate(sid, files, editedAt, now, stateDir, cwd);
-      return verdict && stopReceiptDue(sid, stateDir, now) ? verdict : "";
+      // Receipt = the stopping session's OWN writes: a lead is never held for what its sub-agents wrote (each sub-agent is held for its own files).
+      const own = projectCodeFiles(ownFilesOf(changes, payload.agent_id, payload.background_tasks), payloadCwd);
+      const verdict = receiptGate(sid, own, editedAt, now, stateDir, cwd);
+      if (verdict) return stopReceiptDue(sid, stateDir, now) ? verdict : "";
+      // Files held back because their sub-agent is still running stay visible: a non-blocking note (never a refusal) so code from an agent killed before it finished still reaches the user.
+      const held = files.filter((f) => !own.includes(f));
+      if (isAgentKey(payload.agent_id) || held.length === 0 || receiptGate(sid, held, editedAt, now, stateDir, cwd) === null) return "";
+      const note = `UNVERIFIED sub-agent code (agent still running, no passing receipt yet): ${held.slice(0, 5).map((f) => basename(f)).join(", ")}. It is judged again at the next Stop once the agent finished.`;
+      return stopNoticeOnce(sid, `${note}\n${held.join("\n")}`, stateDir, now) ? systemMessage(note) : "";
     }
     const msg = stopSolidMessage(violations, max);
     if (!stopNoticeOnce(sid, `${msg}\n${files.join("\n")}`, stateDir, now)) return "";

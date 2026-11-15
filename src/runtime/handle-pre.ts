@@ -7,6 +7,7 @@ import { recordActivity } from "./record";
 import { respond } from "./respond";
 import { withDenyNotice } from "./deny-notice";
 import { designGate } from "./design";
+import { leadScopeGate } from "./lead-guards/scope-pre-gate";
 import { taskContext } from "./inject-context";
 import { securityAdvisory, securityAdvisoryForPatch } from "./lifecycle/security/check-skill";
 import { solidScopeOutcome } from "./solid-pre";
@@ -53,6 +54,12 @@ export async function handlePre(ctx: PreContext): Promise<HandleOutcome> {
   if (intercept !== null) {
     if (intercept.docSource) await recordActivity(file, { kind: "doc", framework, sessionId: event.sessionId, source: intercept.docSource });
     return { stdout: intercept.stdout, exit: 0 };
+  }
+
+  // Lead scope guard (core scope): a task brief must quote the owner's real words (inert for sub-agents and other tools).
+  if (opts.scope === undefined || opts.scope === "core") {
+    const scopeBlock = leadScopeGate(event.tool, event.input, payload, id);
+    if (scopeBlock) return { stdout: withDenyNotice(id, respond(id, scopeBlock, event.eventName ?? "PreToolUse"), scopeBlock, event.sessionId, dirname(file), opts.now), exit: 0 };
   }
 
   const designBlock = designGate(payload, event, designCacheDir, opts.cwd, opts.corpusRoot);
