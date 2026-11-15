@@ -7,7 +7,7 @@ import { loadSessionState, sanitizeSessionId, saveSessionState, sessionsDir } fr
 import { trackFile } from "../paths";
 import { projectStateDir } from "../project-state-dir";
 import { freshReceiptFromFile } from "../../tracking/receipts";
-import { attributeFiles, filesWrittenByAgent, isAgentKey, taggedFilesOf } from "./agent-files";
+import { attributeFiles, filesWrittenByAgent, isAgentKey, isGateExemptAgent, taggedFilesOf } from "./agent-files";
 import type { SessionChanges } from "./code-edit-time";
 import { projectCodeFiles } from "./project-code";
 import { clearGuardRecord, recordGuardEmission } from "./report-recovery";
@@ -17,8 +17,6 @@ import { receiptHint } from "./receipt-hint";
 function memoryDir(home: string): string {
   return join(home, ".claude", "memory", "agents");
 }
-
-const SKIP_AGENTS = /(sniper|sniper-faster|explore-codebase|research-expert|claude-code-guide|Explore|Plan)/;
 
 /** Collapse {@link receiptHint}'s full sentence into a short imperative clause for the advisory note. */
 function shortReceiptHint(cwd: string, files: readonly string[]): string {
@@ -67,7 +65,7 @@ export function trackAgentMemory(data: Record<string, unknown>, home: string = h
   const sessionId = sanitizeSessionId(data.session_id) ?? "unknown";
   const ts = new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z");
   recordHistory(home, String(data.agent_id ?? "unknown"), agentType, ts);
-  if (SKIP_AGENTS.test(agentType)) return completedOutput(id, `Agent ${agentType} completed`);
+  if (isGateExemptAgent(agentType)) return completedOutput(id, `Agent ${agentType} completed`);
   const state = loadSessionState(sessionId, home);
   const changes = state.changes as SessionChanges | undefined;
   // Real project code only: never session-scratchpad / $TMPDIR / out-of-root probes.
@@ -106,8 +104,8 @@ export function trackAgentMemory(data: Record<string, unknown>, home: string = h
     // (a relative path resolves against the hook cwd).
     const present = fresh.filter((f) => existsSync(resolve(hookCwd, f)));
     if (present.length > 0) {
-      // Advisory (no hard block here — the TaskCompleted gate enforces): flag the
-      // missing proof when the agent owns code but posted no fresh passing receipt.
+      // Flag the missing proof when the agent owns code but posted no fresh passing
+      // receipt (advisory, or a hard block on precise attribution — see below).
       // Window = TTL×5, matching the TaskCompleted receipt gate.
       const windowMs = resolveTtlSec(process.env) * 1000 * 5;
       const noReceipt = freshReceiptFromFile(trackFile(sessionId, projectStateDir(process.cwd())), windowMs, now) === null;
@@ -115,7 +113,11 @@ export function trackAgentMemory(data: Record<string, unknown>, home: string = h
       // Report recovery (Claude Code only): remember that this stop's final message gets
       // displaced by the agent's reply to the guard, so the parent can recover the report.
       if (id === "claude-code") recordGuardEmission(data, sessionId, home, now);
-      return reminderOutput(id, `SNIPER VALIDATION REQUIRED: Agent '${agentType}' modified ${present.length} code file(s): ${present.join(", ")}. Run sniper agent now.${note}`);
+      const text = `SNIPER VALIDATION REQUIRED: Agent '${agentType}' modified ${present.length} code file(s): ${present.join(", ")}. Run sniper agent now.${note}`;
+      // Hard gate (Claude Code only): a sub-agent never reaches `Stop`, so this is its only receipt barrier. Documented `decision:"block"` keeps the subagent running with `reason` as its next instruction; no loop — never while `stop_hook_active` is true, and each (agent, file) is demanded once (`remindedAt`).
+      // Only on PRECISE attribution (`attributed` from the agent's transcript/tags): the session-wide fallback stays advisory, so an agent that wrote nothing is never held for another's files.
+      if (id === "claude-code" && attributed !== null && noReceipt && data.stop_hook_active !== true) return JSON.stringify({ decision: "block", reason: text });
+      return reminderOutput(id, text);
     }
   }
   // A fresh (non-continuation) stop with NO guard emitted: this agent's previous run, if any, no longer applies.
