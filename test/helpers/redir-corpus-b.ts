@@ -156,7 +156,8 @@ export const ROWS_B: readonly CorpusRow[] = [
   { id: "R28", cmd: "bun test > @D/a.log 2>&1 &", old: "ask" },
   { id: "R29", cmd: "ls /x\n\necho y > @D/o", old: "ask", safe: true },
   { id: "R30", cmd: "echo x > @D/a ", old: "ask" },
-  { id: "R31", cmd: "SP=@D; echo x > $SP/a", old: "ask" },
+  // Owner decision 2026-11-15: any variable bound to the scratchpad in the same command is accepted (was: only `S`).
+  { id: "R31", cmd: "SP=@D; echo x > $SP/a", old: "ask", safe: true },
   { id: "G1", cmd: "sort '-o' @P/README.md @P/notes.txt > @D/s.log", old: "ask" },
   { id: "G2", cmd: "sort \"-o\" @P/README.md @P/notes.txt > @D/s.log", old: "ask" },
   { id: "G3", cmd: "sort --outp=@P/README.md @P/notes.txt > @D/s.log", old: "ask" },

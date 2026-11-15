@@ -1,4 +1,5 @@
 import { matchGitPatterns, GIT_BLOCKED, GIT_ASK } from "./patterns";
+import { isUnprotectedWip } from "./git-wip";
 import type { PolicyResult } from "./interfaces/types";
 
 /**
@@ -9,7 +10,7 @@ import type { PolicyResult } from "./interfaces/types";
  * `!ralphSafe &&` guards). Returns the matching gate's {@link PolicyResult},
  * or `null` when neither gate matches.
  */
-export function evaluateGitGates(command: string | undefined, ralphSafe: boolean): PolicyResult | null {
+export function evaluateGitGates(command: string | undefined, ralphSafe: boolean, cwd?: string): PolicyResult | null {
   if (ralphSafe || !command) return null;
   if (matchGitPatterns(command, GIT_BLOCKED)) {
     const reason = `Destructive git command: ${command}`;
@@ -25,6 +26,8 @@ export function evaluateGitGates(command: string | undefined, ralphSafe: boolean
     };
   }
   if (matchGitPatterns(command, GIT_ASK)) {
+    // Plain add/commit on a known non-protected branch: the automatic commit flow must not stall on a click nobody can give.
+    if (isUnprotectedWip(command, cwd)) return null;
     return {
       decision: "deny",
       message: `Git operation requires confirmation: ${command}`,

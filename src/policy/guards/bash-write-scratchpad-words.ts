@@ -34,14 +34,14 @@ function isRunner(words: readonly string[]): boolean {
   return RUNNERS.some((r) => r.every((w, i) => words[i] === w));
 }
 
-/** Classify one statement's words (redirects already removed); null when it is none of the accepted kinds. */
-function classify(words: string[]): Statement["kind"] | null {
+/** Classify one statement's words (redirects already removed); null when it is none of the accepted kinds. `name` is the scratchpad variable. */
+function classify(words: string[], name: string): Statement["kind"] | null {
   let at = 0;
   while (at < words.length && ASSIGN.test(words[at] ?? "")) at++;
   const rest = words.slice(at);
-  if (rest.length === 0) return at === 0 ? "empty" : words.every((w) => w.startsWith("S=")) ? "assign" : null;
+  if (rest.length === 0) return at === 0 ? "empty" : words.every((w) => w.startsWith(`${name}=`)) ? "assign" : null;
   // Plain words only: quotes, escapes, braces, globs, `(`, `~`, `!` can hide separators or option spellings from this naive parser.
-  if (words.some((w) => !PLAIN_WORD.test(w.replace(/\$\{S\}|\$S(?![A-Za-z0-9_])/g, "S")))) return null;
+  if (words.some((w) => !PLAIN_WORD.test(w.replace(new RegExp(`\\$\\{${name}\\}|\\$${name}(?![A-Za-z0-9_])`, "g"), "S")))) return null;
   const head = rest[0] ?? "";
   if (head === "timeout" && /^\d+[smhd]?$/.test(rest[1] ?? "")) return isRunner(rest.slice(2)) ? "runner" : null;
   if (isRunner(rest)) return "runner";
@@ -55,9 +55,10 @@ function classify(words: string[]): Statement["kind"] | null {
  * deliberately naive about quotes (a separator inside quotes only yields an
  * unclassifiable fragment, i.e. an extra ask, never a hidden command).
  * @param cmd - Full raw command.
+ * @param name - Scratchpad variable (`S` by default; see `scratchpadVarName`).
  * @returns The statements, or null when any statement is not a plain assignment, reader or runner.
  */
-export function parseStatements(cmd: string): Statement[] | null {
+export function parseStatements(cmd: string, name = "S"): Statement[] | null {
   const out: Statement[] = [];
   let from = 0;
   let before = "";
@@ -66,7 +67,7 @@ export function parseStatements(cmd: string): Statement[] | null {
     const text = cmd.slice(from, end);
     const redirects = text.match(REDIRECT) ?? [];
     const words = text.replace(REDIRECT, " ").split(/[ \t]+/).filter(Boolean);
-    const kind = classify(words);
+    const kind = classify(words, name);
     if (kind === null) return null;
     const files = redirects.filter((r) => !/^(?:&|\d*)>>?&?[ \t]*["']?\/dev\/null/.test(r) && !DUP_ONLY.test(r)).length;
     out.push({ text, start: from, before, after: sep?.[0] ?? "", kind, words, files });
