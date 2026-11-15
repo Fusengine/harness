@@ -1,6 +1,6 @@
 import { parseOutputRedirect } from "./bash-write-redirect-op";
 import { isFreshOrRegular, isPlainComponent, scratchpadDirOf, type TempRoot } from "./bash-write-scratchpad-target";
-import { scratchpadVarResolves } from "./bash-write-scratchpad-var";
+import { scratchpadVarName, scratchpadVarResolves } from "./bash-write-scratchpad-var";
 import { parseStatements, type Statement } from "./bash-write-scratchpad-words";
 
 const ESCAPE = /[.*+?^${}()|[\]\\]/g;
@@ -12,20 +12,22 @@ const DUP = new RegExp(`^&(?:\\d+|-)${BOUNDARY}`);
 const DEV_NULL = new RegExp(`^(["']?)/dev/null\\1${BOUNDARY}`);
 /** Printable ASCII, tab and newline only: JS `\s` and the shell disagree on every other byte. */
 export const PLAIN_TEXT: RegExp = /^[\x20-\x7e\t\n]*$/;
-/** Comments, command/process substitution, arithmetic, heredocs and any `${` other than `${S}` hide or rebind things. */
-export const OPAQUE_SYNTAX: RegExp = /#|\\|\(|`|\$\(|\$\{(?!S\})|\(\(|<<|[<>]\(|=\(/;
+/** Comments, command/process substitution, arithmetic, heredocs and any `${` other than `${name}` (the scratchpad variable) hide or rebind things. */
+export const opaqueSyntax = (name = "S"): RegExp => new RegExp(`#|\\\\|\\(|\`|\\$\\(|\\$\\{(?!${name}\\})|\\(\\(|<<|[<>]\\(|=\\(`);
+/** {@link opaqueSyntax} for the owner's `S`. */
+export const OPAQUE_SYNTAX: RegExp = opaqueSyntax();
 
 /**
- * Match one redirect target word at `pos`: only `<dir>/<name>`, `$S/<name>`
- * or `${S}/<name>`, optionally in one plain quote pair (single quotes never
+ * Match one redirect target word at `pos`: only `<dir>/<name>`, `$V/<name>`
+ * or `${V}/<name>` (`V` = `varName`, the scratchpad variable), optionally in one plain quote pair (single quotes never
  * around a variable), followed by a word boundary.
  * @returns The end index and whether it used the variable, or null.
  */
-function matchTarget(cmd: string, pos: number, dir: string | null, temps: readonly TempRoot[]): { end: number; variable: boolean } | null {
+function matchTarget(cmd: string, pos: number, dir: string | null, temps: readonly TempRoot[], varName: string): { end: number; variable: boolean } | null {
   const forms = [...(dir === null ? [] : [{ text: dir, physical: dir, scratch: true }]), ...temps.flatMap((t) => t.names.map((text) => ({ text, physical: t.physical, scratch: false })))];
   for (const form of forms) {
     const dirPattern = form.text.replace(ESCAPE, "\\$&");
-    const alt = form.scratch ? `${dirPattern}|(\\$S|\\$\\{S\\})` : dirPattern;
+    const alt = form.scratch ? `${dirPattern}|(\\$${varName}|\\$\\{${varName}\\})` : dirPattern;
     const word = new RegExp(`^(["']?)(?:${alt})/([^\\s;&|<>)"']+)\\1${BOUNDARY}`).exec(cmd.slice(pos));
     if (!word) continue;
     const [text, quote, ...rest] = word;
@@ -42,7 +44,7 @@ function matchTarget(cmd: string, pos: number, dir: string | null, temps: readon
 const OPERATOR = /^(?:\d*>{1,2}|&>{1,2}|>&)$/;
 
 /** Walk every `>` of the command; returns the number of file redirects, whether one used `$S` and the indexes of the `&` that belong to accepted redirect operators, or null if any `>` is not a proven safe form. */
-export function scanRedirects(cmd: string, dir: string | null, temps: readonly TempRoot[] = []): { files: number; variable: boolean; amps: number[] } | null {
+export function scanRedirects(cmd: string, dir: string | null, temps: readonly TempRoot[] = [], name = "S"): { files: number; variable: boolean; amps: number[] } | null {
   let files = 0;
   let variable = false;
   const amps: number[] = [];
@@ -61,7 +63,7 @@ export function scanRedirects(cmd: string, dir: string | null, temps: readonly T
     let pos = opEnd + 1;
     while (cmd[pos] === " " || cmd[pos] === "\t") pos++;
     const devNull = DEV_NULL.exec(cmd.slice(pos));
-    const target = devNull ? { end: pos + devNull[0].length, variable: false } : matchTarget(cmd, pos, dir, temps);
+    const target = devNull ? { end: pos + devNull[0].length, variable: false } : matchTarget(cmd, pos, dir, temps, name);
     if (target === null) return null;
     if (!devNull) files++;
     variable ||= target.variable;
@@ -105,15 +107,18 @@ function orderIsSafe(statements: readonly Statement[]): boolean {
 export function redirectsOnlyInScratchpad(cmd: string, scratchpadDir: unknown): boolean {
   try {
     const dir = scratchpadDirOf(scratchpadDir);
-    if (dir === null || cmd.length > MAX_LENGTH || !PLAIN_TEXT.test(cmd) || OPAQUE_SYNTAX.test(cmd)) return false;
-    const redirects = scanRedirects(cmd, dir);
+    if (dir === null || cmd.length > MAX_LENGTH || !PLAIN_TEXT.test(cmd)) return false;
+    // The scratchpad variable is whichever name this very command binds to the dir (`S` by default); `$other` never resolves.
+    const name = scratchpadVarName(cmd, dir);
+    if (opaqueSyntax(name).test(cmd)) return false;
+    const redirects = scanRedirects(cmd, dir, [], name);
     // Any `&` other than `&&`, a descriptor dup or a scanned redirect operator is a background job / `|&`.
     const rest = redirects === null ? cmd : redirects.amps.reduce((s, i) => `${s.slice(0, i)} ${s.slice(i + 1)}`, cmd);
     if (/&/.test(rest.replace(/&&|\d*>&(?:\d+|-)/g, ""))) return false;
-    const statements = redirects === null ? null : parseStatements(cmd);
+    const statements = redirects === null ? null : parseStatements(cmd, name);
     if (redirects === null || statements === null || redirects.files === 0 || !orderIsSafe(statements)) return false;
-    // Any `$S` anywhere (not only in a target) must be provably the scratchpad dir.
-    return !(redirects.variable || /\$\{S\}|\$S(?![A-Za-z0-9_])/.test(cmd)) || scratchpadVarResolves(cmd, statements, dir);
+    // Any use of the variable anywhere (not only in a target) must be provably the scratchpad dir.
+    return !(redirects.variable || new RegExp(`\\$\\{${name}\\}|\\$${name}(?![A-Za-z0-9_])`).test(cmd)) || scratchpadVarResolves(cmd, statements, dir, name);
   } catch {
     return false;
   }

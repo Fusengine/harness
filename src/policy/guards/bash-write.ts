@@ -1,7 +1,7 @@
 import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
 import { cpMoveCommands } from "./bash-write-cpmv";
-import { askFileWrite, blockCodeWrite, strictest } from "./bash-write-prompts";
+import { askFileWrite, blockCodeWrite, blockSubagentRedirect, strictest } from "./bash-write-prompts";
 import { hasSafeWriteTarget, isSafeCommandTarget, isSafeWritePath } from "./bash-write-safe-paths";
 import { shellFileWriteRedirects } from "./bash-write-redirects";
 import { literalWriteBlock } from "./bash-write-literal";
@@ -137,7 +137,7 @@ export function baseBashWriteGuard(ctx: GuardContext): Prompt | null {
     // Same fall-through for command output (read-only producer) landing strictly in scratchpad / system temp;
     // literal text written through the shell is refused outright (Write/Edit tool), anything else keeps the ask.
     if (!redirectsOnlyInScratchpad(cmd, ctx.scratchpadDir) && !commandOutputOnlyInTemp(cmd, ctx.scratchpadDir)) {
-      return literalWriteBlock(cmd, ctx.cwd) ?? askFileWrite("Shell redirect to file detected. Authorize?", "bash-write:file-redirect");
+      return literalWriteBlock(cmd, ctx.cwd) ?? (ctx.agentId ? blockSubagentRedirect(ctx.scratchpadDir) : askFileWrite("Shell redirect to file detected. Authorize?", "bash-write:file-redirect"));
     }
   }
 
