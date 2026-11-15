@@ -4,6 +4,20 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.120] - 2026-11-15
+
+### Added
+
+- **lead-guards: outcome-only Stop guard for the lead** — on a lead turn woken by a sub-agent notification, a final message that only relays status (no outcome) is blocked once; the check is structural and language-agnostic (markers do not depend on any human language) and never fires when `stop_hook_active` is set. Disable with `FUSE_LEAD_OUTCOME_GUARD=0`. Tests: `lead-guard-outcome`, `lead-guard-multilingual`, `lead-guard-runtime`.
+- **lead-guards: owner-scope brief guard (PreToolUse)** — a lead `Agent`/`Task` brief whose OWNER RULES quote is not found verbatim in a real owner message of the transcript is denied. `SendMessage` is checked only when it carries an OWNER RULES header (plain follow-ups pass); read-only helpers (explore/research, web-fetch, claude-code-guide) are exempt; the header match is tolerant of formatting. Disable with `FUSE_LEAD_SCOPE_GUARD=0`. In Claude Code the guard becomes active only once the core-guards hook matcher includes `Agent|Task|SendMessage` (claude-plugins, next release). Tests: `lead-guard-scope`.
+
+### Fixed
+
+- **lifecycle: the Stop receipt no longer blocks the lead on sub-agent writes** — the lead's Stop receipt gate counts the session's own writes; code written by a sub-agent still running emits a non-blocking note instead of a refusal, and is judged as before once that sub-agent has finished. SubagentStop hard-blocks on Claude Code only, with precise attribution, once per agent and file. Tests: `receipt-own-writes`, `subagent-stop-receipt-block`, `guard-attribution`.
+- **gates: the commit agent's WIP `git add`/`git commit` on a feature branch runs without an ask** — plain add/commit (no `--amend`, `--no-verify`, `add -f`; literal `git` word, no expansion characters) is no longer asked when the payload cwd's branch is known and not `main`/`master`/`develop`/`production`; on a protected branch it still asks. Every other git verb is unchanged. Tests: `git-wip-no-ask`, `git-wip-refuse`.
+- **gates: sub-agent redirect block and `core.hooksPath` ask** — a file redirect that cannot be auto-approved becomes a block with instructions when the payload carries `agent_id` (a sub-agent cannot answer an ask); the main session keeps the ask. Any `core.hooksPath` change (`git config` or `git -c`) always asks. Tests: `bash-write-subagent-redirect`.
+- **bash-write: scratchpad redirect accepts any bound variable** — the scratchpad redirect window accepts any variable bound to the scratchpad in the same command (steering names excluded). Tests: `bash-write-scratchpad-anyvar`.
+
 ## [0.1.119] - 2026-11-13
 
 0.1.118 was never published: its bump was superseded by this release after a Linux-only test failure.
