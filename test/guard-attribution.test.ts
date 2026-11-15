@@ -111,9 +111,9 @@ function replayGuards(root: string, path: string, sid: string): void {
   trackSessionChanges(sid, path, home, T, { agentId: "Z", cwd: root });
   const sub = trackAgentMemory({ session_id: sid, agent_type: "general-purpose", cwd: root, agent_id: "Z" }, home, T);
   expect(sub).toContain(`modified 1 code file(s): ${path}.`); // sub-agent
-  for (const event of ["Stop", "TaskCompleted"]) {
-    expect(JSON.parse(validateTaskSolid({ session_id: sid, cwd: root }, home, T, stateDir, event))).toMatchObject({ continue: false }); // lead
-  }
+  // Teammate completion keeps the session-wide gate; a Stop is held for the stopping agent's OWN writes (the lead is no longer held for a sub-agent's, see receipt-own-writes.test.ts).
+  expect(JSON.parse(validateTaskSolid({ session_id: sid, cwd: root }, home, T, stateDir, "TaskCompleted"))).toMatchObject({ continue: false });
+  expect(JSON.parse(validateTaskSolid({ session_id: sid, cwd: root, agent_id: "Z" }, home, T, stateDir, "Stop"))).toMatchObject({ continue: false });
 }
 
 test("case 15: TMPDIR=<proj>/tmp and the agent writes <proj>/tmp/x.ts → still guarded (sub-agent, lead, Stop)", () => {

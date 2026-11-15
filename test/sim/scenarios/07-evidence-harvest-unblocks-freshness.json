@@ -16,7 +16,7 @@
     },
     {
       "scope": "core",
-      "doc": "SubagentStop with agent_transcript_path → harvest records explore + research into trackFile(sc07). agent_type=research-expert is in SKIP_AGENTS so trackAgentMemory returns {message:\"Agent research-expert completed\"} (agent-memory.ts:48) — but the harvest ran FIRST regardless.",
+      "doc": "SubagentStop with agent_transcript_path → harvest records explore + research into trackFile(sc07). agent_type=research-expert is gate-exempt (isGateExemptAgent, agent-files.ts) so trackAgentMemory returns {message:\"Agent research-expert completed\"} — but the harvest ran FIRST regardless.",
       "event": {
         "hook_event_name": "SubagentStop",
         "session_id": "sc07",

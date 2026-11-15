@@ -7,7 +7,7 @@ import { BURST_DEDUP_MS } from "../burst-window";
 import { sniperRequiredNotice } from "../notices";
 import { isCodeFile } from "./code-extensions";
 import type { SessionChanges } from "./code-edit-time";
-import { isAgentKey } from "./agent-files";
+import { isAgentKey, isGateExemptAgent } from "./agent-files";
 import { isProjectCode } from "./project-code";
 
 /** `changes` block persisted in per-session state (counts and file list are always present once tracked). */
@@ -24,14 +24,16 @@ const VERSION_FILE = /^_{0,2}version_{0,2}\.py$/;
  * @param filePath - The edited file path.
  * @param home - Home dir (defaults to `~`).
  * @param now - Clock (defaults to `Date.now()`).
- * @param ctx - Optional hook context: `agentId` (PostToolUse `agent_id`, per-agent attribution) and `cwd` (project-root fallback for {@link isProjectCode}).
+ * @param ctx - Optional hook context: `agentId` (PostToolUse `agent_id`, per-agent attribution), `agentType` (a gate-exempt type such as sniper keeps its writes the lead's) and `cwd` (project-root fallback for {@link isProjectCode}).
  * @returns The native hook stdout (possibly empty when not a code file).
  */
-export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, home: string = homedir(), now: number = Date.now(), ctx: { agentId?: unknown; cwd?: string } = {}): string {
+export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, home: string = homedir(), now: number = Date.now(), ctx: { agentId?: unknown; agentType?: unknown; cwd?: string } = {}): string {
   if (!filePath || !isCodeFile(filePath)) return "";
   const sid = sanitizeSessionId(sessionIdRaw) ?? "unknown";
   const state = loadSessionState(sid, home);
-  const prev = (state.changes as Changes | undefined) ?? { cumulativeCodeFiles: 0, modifiedFiles: [] };
+  // Defensive: a persisted block may lack the counters/list (absent or partial state): default them.
+  const stored = state.changes as SessionChanges | undefined;
+  const prev: Changes = { ...stored, cumulativeCodeFiles: stored?.cumulativeCodeFiles ?? 0, modifiedFiles: stored?.modifiedFiles ?? [] };
   const files = [...prev.modifiedFiles];
   let count = prev.cumulativeCodeFiles;
   if (!files.includes(filePath)) { count += 1; files.push(filePath); }
@@ -41,12 +43,18 @@ export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, hom
   // Per-agent attribution: a PostToolUse fired inside a sub-agent carries its `agent_id`.
   const agentFiles = { ...(prev.agentFiles ?? {}) };
   if (isAgentKey(ctx.agentId) && !agentFiles[ctx.agentId]?.includes(filePath)) agentFiles[ctx.agentId] = [...(agentFiles[ctx.agentId] ?? []), filePath];
+  // Own-writes attribution: a write with no sub-agent `agent_id` is the session's own. A legacy block (no `leadFiles` yet) seeds from every already-tracked file no agent claimed, so nothing tracked before this field existed is ever dropped from the Stop receipt gate.
+  const leadFiles = [...(prev.leadFiles ?? prev.modifiedFiles.filter((f) => !Object.values(prev.agentFiles ?? {}).some((l) => l.includes(f))))];
+  // A gate-exempt agent (sniper, explorer...) is never held at SubagentStop, so its writes stay the lead's to verify.
+  const ownWrite = !isAgentKey(ctx.agentId) || isGateExemptAgent(ctx.agentType);
+  if (ownWrite && !leadFiles.includes(filePath)) leadFiles.push(filePath);
   state.changes = {
     ...prev,
     cumulativeCodeFiles: count,
     modifiedFiles: files,
     editedAt,
     agentFiles,
+    leadFiles,
     lastModifiedFile: filePath,
     lastCheck: new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z"),
   } satisfies Changes;
