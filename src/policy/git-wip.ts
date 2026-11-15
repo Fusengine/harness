@@ -13,6 +13,26 @@ import { expand } from "./effective-segments";
 
 /** Git options that redirect the command to another repository, worktree or config, plus `GIT_*` environment prefixes: the branch of `cwd` is then not the branch acted on. */
 const REDIRECTED = /(?:^|\s)(?:-C|-c|--git-dir|--work-tree|--namespace)(?:\s|=|$)|\bGIT_[A-Z_]+=/;
+/** Statement separators of the quote-unaware split in {@link everyStatementStartsWithGit}. */
+const SEPARATORS = /&&|\|\||[;|&\n]/;
+/** File-descriptor duplication (`2>&1`, `>&2`, `>&-`) and the `&>` / `&>>` redirect operators: their `&` is not a separator. */
+const FD_REDIRECT = /\d*>&(?:\d+|-)|&>>?/g;
+
+/**
+ * True when every statement of `command` starts with the literal word `git` once group openers (`{`, `(`, `!`) are
+ * dropped. `expand` strips leading `NAME=value` words and reserved words from its segments, yet `HOME=…` (global config
+ * with `core.hooksPath`), `PATH=…` (a fake `git`), `EDITOR`/`PAGER`, `LD_PRELOAD`, `HUSKY=0`, `time`, `exec`, `if` all
+ * change what the commit runs: any word before `git` refuses. The split ignores quotes on purpose: a separator inside a
+ * quoted message only yields a fragment that is not `git …`, i.e. an ask, never a hidden command.
+ * @param command - Raw Bash command.
+ */
+function everyStatementStartsWithGit(command: string): boolean {
+  // `2>&1` / `>&2` / `&>file` are redirections, not a `&` separator: blank them so a plain `git commit … 2>&1` stays one statement.
+  return command.replace(FD_REDIRECT, " ").split(SEPARATORS).every((fragment) => {
+    const word = fragment.replace(/^[\s{(!]+/, "");
+    return word === "" || word === "}" || /^git(?:\s|$)/.test(word);
+  });
+}
 /** A `git` word followed directly by an option: any global option (`--exec-path`, `--config-env`, `--bare`, `-p`…) changes the program, config or repository the subcommand uses. Matched after quotes and backslashes are dropped, so `"git"` or `g\it` cannot hide it. */
 const GLOBAL_OPTION = /(?:^|[\s/;&|(])git\s+-/;
 /** `git commit` flags that rewrite history or skip hooks, as written or inside a bundled short-flag word. */
@@ -78,7 +98,7 @@ function currentBranch(cwd: string): string {
  * @param cwd - Absolute directory the shell starts in (host payload cwd).
  */
 export function isUnprotectedWip(command: string, cwd: string | undefined): boolean {
-  if (cwd === undefined || !isAbsolute(cwd) || !existsSync(cwd) || REDIRECTED.test(command)) return false;
+  if (cwd === undefined || !isAbsolute(cwd) || !existsSync(cwd) || REDIRECTED.test(command) || !everyStatementStartsWithGit(command)) return false;
   if (GLOBAL_OPTION.test(command.replace(/["'\\]/g, ""))) return false;
   const { items, opaque } = expand(command);
   if (opaque || items.length === 0) return false;

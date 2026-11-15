@@ -12,6 +12,8 @@ export interface PolicyContext {
   scratchpadDir?: string;
   /** Payload cwd (see GuardContext.cwd). */
   cwd?: string;
+  /** Claude `agent_id` of the calling sub-agent (see GuardContext.agentId); undefined in the main session and on every other host. */
+  agentId?: string;
   /** Optional override for the SOLID max-lines limit. */
   maxLines?: number;
   /** Subagent type — `Explore`/`Plan` are exempt from the file-size gate. */
