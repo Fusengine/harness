@@ -100,13 +100,7 @@ export const SCOPE_BLOCK_REASON: string =
  * They do not execute the owner's mandate, so their briefs need no owner quote. Matched on the part of
  * `subagent_type` after any `plugin:` prefix.
  */
-export const HELPER_AGENT_TYPES: ReadonlySet<string> = new Set(["explore-codebase", "research-expert", "sniper", "sniper-faster", "challenger", "websearch", "Explore", "Plan"]);
-
-/** Fixed brief headers (lead-orchestration template: protocol tokens). */
-export const BRIEF_HEADERS: readonly string[] = ["OWNER RULES", "WRITE", "OUTPUT", "TOOLS", "PROOF", "NON-GOALS", "TEAM", "LANGUAGE", "REPORT"];
-
-/** A SendMessage counts as a brief (and so needs owner quotes) when it carries this many fixed headers. */
-export const SENDMESSAGE_BRIEF_MIN_HEADERS = 2;
+export const HELPER_AGENT_TYPES: ReadonlySet<string> = new Set(["explore-codebase", "research-expert", "sniper", "sniper-faster", "challenger", "websearch", "Explore", "Plan", "web-fetch", "claude-code-guide"]);
 
 /**
  * Quotation marks accepted inside an OWNER RULES section, one capture group each:
@@ -120,8 +114,8 @@ export const MIN_QUOTE_CHARS = 3;
 /** Longest stretch of a brief scanned for quotes after the OWNER RULES header. */
 export const OWNER_SECTION_MAX_CHARS = 3000;
 
-/** The OWNER RULES header. */
-export const OWNER_HEADER_RE: RegExp = /OWNER RULES/;
+/** The OWNER RULES header, tolerant of case, runs of whitespace (incl. no-break space) and `_` / `-` separators, so a respelled header never hides a mandate from the guard. */
+export const OWNER_HEADER_RE: RegExp = /OWNER[\s_-]+RULES/i;
 
 /** The start of the next fixed header after OWNER RULES (line start, `/ HEADER` listing, or `HEADER:` / `HEADER (` inline). */
 export const NEXT_HEADER_RE: RegExp =

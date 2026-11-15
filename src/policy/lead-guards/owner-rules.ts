@@ -1,13 +1,11 @@
 import type { ScopeVerdict } from "./interfaces/types";
 import {
-  BRIEF_HEADERS,
   MIN_QUOTE_CHARS,
   NEXT_HEADER_RE,
   OWNER_HEADER_RE,
   OWNER_SECTION_MAX_CHARS,
   QUOTE_RE,
   SCOPE_BLOCK_REASON,
-  SENDMESSAGE_BRIEF_MIN_HEADERS,
 } from "./markers";
 
 /**
@@ -39,22 +37,17 @@ export function ownerRulesQuotes(brief: string): string[] {
   return quotes;
 }
 
-/** Number of distinct fixed brief headers (`WRITE:`, `PROOF`, ...) present in `text`. */
-function headerCount(text: string): number {
-  return BRIEF_HEADERS.filter((h) => new RegExp(String.raw`(?:^|[\s*#_])${h.replace("-", "\\-")}(?=\s*[:(\n]|\s*$)`, "m").test(text)).length;
-}
-
 /**
  * True when this lead tool call dispatches a task: `Agent`/`Task` always; `SendMessage` only when the
- * message carries at least {@link SENDMESSAGE_BRIEF_MIN_HEADERS} fixed brief headers (a one-line
- * follow-up inside an already-briefed mandate is not a brief).
+ * message carries an `OWNER RULES` header, i.e. a new mandate (a follow-up inside an already-briefed
+ * mandate is not a brief, whatever other headers it uses).
  * @param tool - Normalized tool name.
  * @param text - The prompt/message text.
  * @returns True when the call is a task brief subject to the scope guard.
  */
 export function isBriefCall(tool: string, text: string): boolean {
   if (tool === "Agent" || tool === "Task") return true;
-  return tool === "SendMessage" && headerCount(text) >= SENDMESSAGE_BRIEF_MIN_HEADERS;
+  return tool === "SendMessage" && OWNER_HEADER_RE.test(text);
 }
 
 /**

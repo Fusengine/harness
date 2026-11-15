@@ -49,11 +49,16 @@ describe("isBriefCall / briefText", () => {
     expect(isBriefCall("Agent", "go")).toBe(true);
     expect(isBriefCall("Task", "go")).toBe(true);
   });
-  test("SendMessage is a brief only with >= 2 fixed headers", () => {
+  test("SendMessage is a brief only when it carries an OWNER RULES header (a new mandate)", () => {
     expect(isBriefCall("SendMessage", "ok, continue")).toBe(false);
     expect(isBriefCall("SendMessage", "Status request from main: report now")).toBe(false);
     expect(isBriefCall("SendMessage", "OWNER RULES: « x y z »\nWRITE: a")).toBe(true);
-    expect(isBriefCall("SendMessage", "WRITE: a\nPROOF: b")).toBe(true);
+    for (const h of ["Owner rules:", "OWNER  RULES:", "OWNER RULES:", "OWNER_RULES:", "owner-rules:"]) {
+      expect(isBriefCall("SendMessage", `${h} « x y z »\nWRITE: a`)).toBe(true);
+    }
+    expect(ownerRulesQuotes("Owner rules: « un deux »\nWRITE: x")).toEqual(["un deux"]);
+    expect(isBriefCall("SendMessage", "WRITE: a\nPROOF: b")).toBe(false);
+    expect(isBriefCall("SendMessage", "Follow-up\nWRITE: a\nOUTPUT: b\nPROOF: c\nREPORT: d")).toBe(false);
   });
   test("other tools are never briefs", () => {
     expect(isBriefCall("Bash", "OWNER RULES WRITE PROOF")).toBe(false);

@@ -79,6 +79,27 @@ Caveats: the second SubagentStop answers "completed (no code changes)" although 
 
 Note on the control: run 1 replayed against an `origin/main` build also lets the sub-agent through, so run 1 alone does not discriminate fixed from unfixed. The pre-fix defect depends on the session-wide attribution fallback and is covered by the unit tests `receipt-own-writes` and `subagent-stop-receipt-block`; run 2 is the positive proof of precise attribution in the real tool.
 
+## (e) Scope guard usability fix: SendMessage follow-ups and read-only built-ins
+
+Change: `SendMessage` is checked only when its message carries an `OWNER RULES` header (a new mandate); `Agent`/`Task` spawns keep the full check; `web-fetch` and `claude-code-guide` join `HELPER_AGENT_TYPES`. Same real-run method, rebuilt `dist` (hooks matcher extended with `SendMessage`).
+
+```
+03:16:34 PreToolUse(Agent) subagent=general-purpose (brief with a quote of the owner's prompt)   -> ALLOW
+03:16:38 PreToolUse(SendMessage) message="Follow-up, reply hi now.\nWRITE: nothing\nPROOF: hi"    -> ALLOW   (2 fixed headers, no OWNER RULES: denied before the fix)
+03:17:12 PreToolUse(Agent) subagent=general-purpose, prompt "Reply with the word hi."             -> deny "Brief without the owner's words"  (non-helper spawn still denied)
+03:17:28 PreToolUse(Agent) subagent=web-fetch, no quote                                           -> ALLOW   (read-only built-in)
+03:18:19 PreToolUse(SendMessage) "OWNER RULES: « <invented French sentence> »\nWRITE: nothing..."  -> deny "Brief without the owner's words"  (invented quote still denied)
+```
+
+Real re-run after the regex fix (rebuilt dist): `SendMessage` with `Owner rules: « <invented sentence> »` -> deny "Brief without the owner's words" (06:45:13).
+
+Challenger round on (e): REFUTED the claim "no denial weakened" on first pass. A probe replayed on HEAD and on the worktree showed that a respelled header (`Owner rules:`, double space, no-break space) with an invented quote was blocked before (the old 2-header count caught it) and passed after. Fixed: `OWNER_HEADER_RE` is now `/OWNER[\s_-]+RULES/i` (unit-tested for those variants and for `OWNER_RULES` / `owner-rules`). Open points left to the owner, not changed (outside the requested scope):
+- A SendMessage without the header can resume a finished agent (Claude Code "Resuming agent"), i.e. re-task it without a quote. This is the requested behaviour for follow-ups.
+- Helper matching strips any `plugin:` prefix, so `x:web-fetch` / `x:claude-code-guide` (like `x:sniper` before) are exempt. Pre-existing mechanism, two names added.
+- Production wiring: `claude-plugins` `core-guards` hooks.json PreToolUse matcher has no Agent|Task|SendMessage, and the `ai-pilot` entry (`Agent|Task`) runs scope `aipilot`, where `leadScopeGate` is inert (core scope only). The installed plugins may therefore never fire the scope guard; the real run used a hand-written matcher. Not verified against an installed plugin set.
+
+Test-method note: a first attempt at the invented-quote case (03:17:49, ALLOW) was an artifact: the quote was written in the owner's own prompt, so it was a real owner quote. It was re-run with a sentence absent from the prompt (03:18:19, deny). The (e) follow-up was sent to a real named background agent (`worker1`) in the same session.
+
 ## Not verified
 
 - The receipt-own-writes defect itself (lead's Stop blocked by a sub-agent's files) was not reproduced against origin/main in the real tool; it is proven by the unit tests only.

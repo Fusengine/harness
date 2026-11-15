@@ -148,7 +148,7 @@ describe("leadScopeGate", () => {
     expect(leadScopeGate("Agent", agent("WRITE: x\nPROOF: y"), {}, "claude-code", {})).toBeNull();
   });
   test("lead helpers (explore/research/sniper/challenger) are exempt by subagent_type, with or without plugin prefix", () => {
-    for (const t of ["fuse-ai-pilot:explore-codebase", "fuse-ai-pilot:research-expert", "fuse-ai-pilot:sniper", "fuse-ai-pilot:challenger", "Explore"]) {
+    for (const t of ["fuse-ai-pilot:explore-codebase", "fuse-ai-pilot:research-expert", "fuse-ai-pilot:sniper", "fuse-ai-pilot:challenger", "Explore", "web-fetch", "claude-code-guide"]) {
       expect(leadScopeGate("Agent", { prompt: "WRITE: x", subagent_type: t }, { transcript_path: tx() }, "claude-code", {})).toBeNull();
     }
     expect(leadScopeGate("Agent", { prompt: "WRITE: x", subagent_type: "general-purpose" }, { transcript_path: tx() }, "claude-code", {})?.kind).toBe("block");
@@ -165,6 +165,8 @@ describe("leadScopeGate", () => {
   });
   test("SendMessage: short follow-up passes, a headed brief is checked", () => {
     expect(leadScopeGate("SendMessage", { to: "a", message: "continue" }, { transcript_path: tx() }, "claude-code", {})).toBeNull();
+    const follow = "Follow-up on the running mandate.\nWRITE: src/a.ts\nPROOF: bun test\nREPORT: short";
+    expect(leadScopeGate("SendMessage", { to: "a", message: follow }, { transcript_path: tx() }, "claude-code", {})).toBeNull();
     expect(leadScopeGate("SendMessage", { to: "a", message: brief("« faux faux »") }, { transcript_path: tx() }, "claude-code", {})?.kind).toBe("block");
     expect(leadScopeGate("SendMessage", { to: "a", message: brief("« ca doit etre garsantie »") }, { transcript_path: tx() }, "claude-code", {})).toBeNull();
   });
