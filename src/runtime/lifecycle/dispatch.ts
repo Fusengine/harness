@@ -19,6 +19,7 @@ import { cartoSessionStart } from "./cartographer/session-start";
 import { dispatchLessons } from "./lessons/dispatch";
 import { withSnapshot } from "./snapshot";
 import { stopCore } from "./stop-core";
+import { outcomeStopGate } from "../lead-guards/outcome-stop-gate";
 import { prdSubagentContext, prdSubagentStopGate, prdStopGate } from "../prd";
 import { joinContextResponses } from "../../policy/prd";
 import { sanitizeSessionId } from "../home-state";
@@ -89,7 +90,8 @@ export function dispatchLifecycle(input: LifecycleInput): string | null {
       if (input.scope === "lessons") return dispatchLessons("Stop", input.payload, input.cwd, input.now, input.id ?? "claude-code");
       if (input.scope !== "core") return null;
       const prdBlock = prdStopGate(input.payload, input.cwd, input.id ?? "claude-code", trackFile(sanitizeSessionId(input.payload.session_id) ?? "unknown", projectStateDir(input.cwd)), input.now);
-      return prdBlock || stopCore(input.payload, input.cwd, input.now, input.id ?? "claude-code");
+      // Lead outcome guard: a status-only relay turn is bounced once (never when the stop is already a continuation).
+      return prdBlock || outcomeStopGate(input.payload, input.id ?? "claude-code") || stopCore(input.payload, input.cwd, input.now, input.id ?? "claude-code");
     }
     case "SubagentStop": {
       // G0 counterpart of the SubagentStart branch above — the SAME
