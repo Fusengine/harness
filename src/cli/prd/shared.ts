@@ -12,21 +12,21 @@ import { describeRouterState } from "../../policy/prd/prd-router-state";
 import { isPrdFlagSet } from "../../policy/prd/prd-enabled";
 import type { PrdRouter, PrdRouterEntry, PrdTaskFile } from "../../policy/prd/interfaces/types";
 import { acquireLock } from "../../runtime/lifecycle/aipilot/apex-task-store";
-import { positionalArgs, resolveAndLoadEnv } from "./resolve";
+import { positionalArgs, resolveAndLoadEnv, type PrdResolveOptions } from "./resolve";
 
 /** `{root, homeSeg}` on success, or an exit code + message on failure. */
 export type PrdStepResult = { ok: true; root: string; homeSeg: string } | { ok: false; code: number; message: string };
 
 /** {@link resolveAndLoadEnv}, narrowed to `{root, homeSeg}` — the common first step of every sub-command. */
-export function resolveRoot(argv: string[], cwd: string, env: NodeJS.ProcessEnv): PrdStepResult {
-  const resolved = resolveAndLoadEnv(argv, cwd, env);
+export function resolveRoot(argv: string[], cwd: string, env: NodeJS.ProcessEnv, opts: PrdResolveOptions = {}): PrdStepResult {
+  const resolved = resolveAndLoadEnv(argv, cwd, env, opts);
   if (!resolved.ok) return { ok: false, code: 2, message: resolved.message };
   return { ok: true, root: resolved.value.root, homeSeg: resolved.value.homeSeg };
 }
 
 /** {@link resolveRoot} + the `FUSE_PRD=1` write gate shared by `validate`/`compact`. */
-export function requireFusePrd(argv: string[], cwd: string, env: NodeJS.ProcessEnv, sub: string): PrdStepResult {
-  const resolved = resolveRoot(argv, cwd, env);
+export function requireFusePrd(argv: string[], cwd: string, env: NodeJS.ProcessEnv, sub: string, opts: PrdResolveOptions = {}): PrdStepResult {
+  const resolved = resolveRoot(argv, cwd, env, opts);
   if (!resolved.ok) return resolved;
   if (!isPrdFlagSet(env)) {
     return { ok: false, code: 1, message: `prd ${sub} requires FUSE_PRD=1 in ${resolved.homeSeg}/.env or the project .env` };
@@ -65,6 +65,27 @@ export async function resolveTaskFile(argv: string[], root: string, homeSeg: str
   const lookup = await loadTaskFileFor(root, homeSeg, task);
   if (!lookup.ok) return lookup;
   return { task, agentArg, ...lookup };
+}
+
+/** Result of {@link requireTaskFile}: `{root, homeSeg}` plus the task lookup, or an exit code + message. */
+export type PrdTaskStep =
+  | ({ ok: true; root: string; homeSeg: string } & Omit<Extract<PrdTaskArgLookup, { ok: true }>, "ok">)
+  | { ok: false; code: number; message: string };
+
+/**
+ * {@link requireFusePrd} then {@link resolveTaskFile} — the shared `validate`/`compact` preamble.
+ * @param argv - Sub-command argv.
+ * @param cwd - Working directory.
+ * @param env - Process environment.
+ * @param sub - Sub-command name for the `FUSE_PRD` error message.
+ * @param usage - Usage line returned when `<task>` is missing.
+ */
+export async function requireTaskFile(argv: string[], cwd: string, env: NodeJS.ProcessEnv, sub: string, usage: string): Promise<PrdTaskStep> {
+  const resolved = requireFusePrd(argv, cwd, env, sub);
+  if (!resolved.ok) return resolved;
+  const tf = await resolveTaskFile(argv, resolved.root, resolved.homeSeg, usage);
+  if (!tf.ok) return tf;
+  return { ...tf, root: resolved.root, homeSeg: resolved.homeSeg };
 }
 
 /** Result of {@link withPrdLock}. */

@@ -2,6 +2,7 @@
  * The PreToolUse ownership decision. Everything it needs is passed in — no
  * I/O. Pure functions over already-loaded router/task-PRD/bindings data.
  */
+import { resolveClaim } from "./prd-claim";
 import type { PrdIdentity, PrdOwnershipVerdict, PrdPathKind, PrdTaskFile } from "./interfaces/types";
 
 /** True when `name === agentType`, or `"<agentType>-<n>"` with `n >= 2`. */
@@ -17,30 +18,6 @@ export function matchesAgentName(name: string, agentType: string): boolean {
 /** Agent names in `taskFile` whose name matches `agentType` (base or `-n` suffixed). */
 export function candidateAgentNames(agentType: string, taskFile: PrdTaskFile): string[] {
   return Object.keys(taskFile).filter((name) => matchesAgentName(name, agentType));
-}
-
-/**
- * agentId -> bound name resolution. `bindings` is the journal's `prdOwners`
- * map (agentId -> name), read-only here. Returns the candidate already
- * bound to this agentId, or the SOLE still-unbound candidate (free to bind
- * now), or `null` (ambiguous: >1 free candidate, or 0 candidates at all).
- */
-export function resolveOwnerBinding(
-  candidates: string[],
-  agentId: string,
-  bindings: Record<string, string>,
-): { name: string; alreadyBound: boolean } | null {
-  const boundToMe = bindings[agentId];
-  if (boundToMe !== undefined && candidates.includes(boundToMe)) {
-    return { name: boundToMe, alreadyBound: true };
-  }
-  const takenByOthers = new Set(
-    Object.entries(bindings).filter(([id]) => id !== agentId).map(([, name]) => name),
-  );
-  const free = candidates.filter((c) => !takenByOthers.has(c));
-  if (free.length !== 1) return null;
-  const [name] = free;
-  return name === undefined ? null : { name, alreadyBound: false };
 }
 
 const COORDINATOR_ONLY_LABEL: Record<"router" | "task" | "docs", string> = {
@@ -60,6 +37,7 @@ function evaluateAgentReport(
   identity: PrdIdentity,
   taskFile: PrdTaskFile | null,
   bindings: Record<string, string>,
+  closed: boolean,
 ): PrdOwnershipVerdict {
   if (identity.lead === true) return { allow: false, reason: "agent report is not the coordinator's to write" };
   if (identity.lead === "unknown") return { allow: "advisory" };
@@ -67,13 +45,7 @@ function evaluateAgentReport(
     return { allow: false, reason: "unidentifiable agent_type — cannot verify ownership" };
   }
   const candidates = candidateAgentNames(identity.agentType, taskFile ?? {});
-  const resolved = resolveOwnerBinding(candidates, identity.agentId, bindings);
-  if (!resolved || resolved.name !== agent) {
-    return { allow: false, reason: "name doesn't match your agent_type, or already bound to another agent" };
-  }
-  return resolved.alreadyBound
-    ? { allow: true }
-    : { allow: true, bind: { agentId: identity.agentId, name: resolved.name } };
+  return resolveClaim({ target: agent, agentType: identity.agentType, agentId: identity.agentId, candidates, bindings, closed });
 }
 
 /**
@@ -85,6 +57,8 @@ export function evaluateWriteOwnership(input: {
   identity: PrdIdentity;
   taskFile: PrdTaskFile | null;
   bindings: Record<string, string>;
+  /** True when the target slot's report on disk is already complete (agent-report writes only; default false). */
+  closed?: boolean;
 }): PrdOwnershipVerdict {
   const { kind, identity, taskFile, bindings } = input;
 
@@ -92,7 +66,7 @@ export function evaluateWriteOwnership(input: {
     return evaluateCoordinatorOnly(kind.kind, identity);
   }
   if (kind.kind === "agentReport") {
-    return evaluateAgentReport(kind.agent, identity, taskFile, bindings);
+    return evaluateAgentReport(kind.agent, identity, taskFile, bindings, input.closed === true);
   }
   if (identity.lead === "unknown") return { allow: "advisory" };
   return { allow: false, reason: "not a recognized PRD file" };

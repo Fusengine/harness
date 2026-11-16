@@ -5,7 +5,7 @@ import { prdPreGate } from "../../../src/runtime/prd/prd-pre-gate";
 import { normalizeEvent } from "../../../src/runtime/normalize";
 import { prdAgentReportPath, prdDocsPath, prdRouterPath, prdTaskPath } from "../../../src/policy/prd";
 import { loadTrack } from "../../../src/tracking/store";
-import { setupPrdEnv } from "./env";
+import { reopenFixtureSlot, setupPrdEnv } from "./env";
 import { denyReason, writeEvent } from "./prd-pre-gate-helpers";
 
 const NOW = 1_700_000_000_000;
@@ -48,8 +48,9 @@ describe("B1 — coordinator-only paths, apply_patch envelope, Bash, Cursor, edg
     const env = setupPrdEnv(".codex"); // codex's homeSeg — must match harnessHomeSegment("codex")
     try {
       process.env.FUSE_PRD = "1";
+      reopenFixtureSlot(env.root, env.homeSeg);
       const own = prdAgentReportPath(env.root, env.homeSeg, "backend-expert");
-      const foreign = prdAgentReportPath(env.root, env.homeSeg, "backend-expert-2");
+      const foreign =prdAgentReportPath(env.root, env.homeSeg, "backend-expert-2");
       const event = normalizeEvent("codex", {
         hook_event_name: "PreToolUse", tool_name: "apply_patch", session_id: env.sessionId, agent_id: "a1", agent_type: "backend-expert",
         tool_input: { command: `*** Begin Patch\n*** Update File: ${own}\n@@\n+x\n*** Update File: ${foreign}\n@@\n+y\n*** Add File: ${join(env.root, "src", "unrelated.ts")}\n+z\n*** End Patch\n` },
@@ -134,6 +135,7 @@ describe("B1 — coordinator-only paths, apply_patch envelope, Bash, Cursor, edg
     const env = setupPrdEnv(".codex"); // codex's homeSeg — must match harnessHomeSegment("codex")
     try {
       process.env.FUSE_PRD = "1";
+      reopenFixtureSlot(env.root, env.homeSeg);
       const own = prdAgentReportPath(env.root, env.homeSeg, "backend-expert");
       // An oversized unrelated file (well over the SOLID file-size default cap,
       // 100 lines) bundled in the SAME apply_patch envelope as a legitimate PRD
@@ -161,6 +163,7 @@ describe("B1 — coordinator-only paths, apply_patch envelope, Bash, Cursor, edg
     const env = setupPrdEnv();
     try {
       process.env.FUSE_PRD = "1";
+      reopenFixtureSlot(env.root, env.homeSeg);
       const exactTarget = prdAgentReportPath(env.root, env.homeSeg, "backend-expert");
       const siblingTarget = prdAgentReportPath(env.root, env.homeSeg, "backend-expert-2");
 

@@ -17,11 +17,13 @@ export {
 } from "./prd-schema";
 
 export {
-  candidateAgentNames, evaluateWriteOwnership, matchesAgentName, resolveOwnerBinding,
+  candidateAgentNames, evaluateWriteOwnership, matchesAgentName,
 } from "./prd-ownership";
 
+export { resolveClaim, type ClaimInput } from "./prd-claim";
+
 export {
-  crossCheckRouter, crossCheckTask, hasAnyViolations, incompleteSubTasks,
+  crossCheckRouter, crossCheckTask, hasAnyViolations, incompleteSubTasks, isSlotClosed,
 } from "./prd-crosscheck";
 
 export { canPromoteRouterEntry, compactAgentEntry, compactTaskFile } from "./prd-compact";

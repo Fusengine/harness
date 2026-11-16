@@ -1,7 +1,7 @@
 {
   "name": "prd-ownership-deny-claude",
   "harness": "claude-code",
-  "doc": "TARGET behavior once Lots A/B ship (prd-design.md §1.4/§2.1/§2.8, not implemented yet — Lot D only). A sub-agent identified as backend-expert (agent_type on the event) tries to Write another agent's own PRD report file, prd/agents/backend-expert-2-prd.json. Final expected verdict: PreToolUse deny with prompt.title 'PRD ownership' (renders '[BLOCKED] PRD ownership', §2.8's Prompt). RED TODAY BY DESIGN: verified live 2026-09-02 against `bun src/cli/bin.ts hook claude-code core` with this exact setup — a deny IS emitted today, but for the WRONG reason: `.claude/apex/` is already in protected-path.ts's PROTECTED_FRAGMENTS (prd-design.md §2.0/§6 Risk 3), so protectedPathGuard fires first with '[BLOCKED] Protected path', never reaching any PRD-ownership logic (which does not exist yet). This scenario intentionally asserts the FINAL string, not today's, so it stays red until prdPreGate (§2.1) ships and bypasses protectedPathGuard for an authorized PRD write.",
+  "doc": "Claim contract (order-independent, one slot per agent). A sub-agent typed backend-expert first writes ITS OWN report slot (allowed, binds for the session), then tries to Write another slot's report (prd/agents/backend-expert-2-prd.json) -> PreToolUse deny with prompt.title 'PRD ownership' (renders '[BLOCKED] PRD ownership'). Same intent as before (an agent never writes a second slot); only the setup changed: a -2 slot may now be claimed FIRST by any same-type agent, so the deny is asserted once the agent already owns a slot. Without the PRD gate the second step would be denied by protectedPathGuard ('Protected path') instead, so the 'PRD ownership' title proves the PRD gate ran.",
   "env": { "FUSE_PRD": "1" },
   "setup": [
     { "path": "$TMP/.claude/apex/prd.json", "content": "{\"auth-refactor\":{\"prd\":\"prd/auth-refactor-prd.json\",\"status\":\"assigned\"}}" },
@@ -10,7 +10,23 @@
   "steps": [
     {
       "scope": "core",
-      "doc": "backend-expert (agent_id+agent_type on the event, per the live Claude sub-agent shape in test/fixtures/prd/authentic/claude/pretooluse-subagent-write.json) attempts to Write backend-expert-2's own report file. Not its file to write (prd-design.md §1.4 table: agentReport / lead:false / name mismatch -> deny).",
+      "doc": "backend-expert claims its own slot (open: no report on disk yet) -> allowed and bound for the session.",
+      "event": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "sc30",
+        "agent_id": "agent-backend-expert-0001",
+        "agent_type": "backend-expert",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "$TMP/.claude/apex/prd/agents/backend-expert-prd.json",
+          "content": "{\"auth-refactor\":{\"jwt-validation\":{\"status\":\"done\",\"modified\":[\"src/auth/login.ts\"],\"unchanged\":[]}}}"
+        }
+      },
+      "expect": { "exit": 0, "stdout": { "regex": "^(?![\\s\\S]*(PRD ownership|\"deny\"))" } }
+    },
+    {
+      "scope": "core",
+      "doc": "The SAME agent_id now reaches for backend-expert-2's report file -> denied (one slot per agent).",
       "event": {
         "hook_event_name": "PreToolUse",
         "session_id": "sc30",

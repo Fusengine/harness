@@ -10,11 +10,14 @@
  * channel). Whether it is ever REACHED for a given id in production is a
  * wiring question, not something this function should gatekeep: measured
  * live against the real hooks.json this project ships (claude-plugins/
- * codex-plugins/kimi-code-plugins) plus each target's own hook docs, only
- * Codex's Stop wiring is a plain `hook codex core` with no short-circuit —
- * claude-code's and Kimi's own Stop hook always carries `--sound stop`,
- * which exits in `maybePlaySound()` (`src/cli/hook-sound.ts`) before stdin
- * is ever read, and hermes/gemini-cli/cline have no event literally named
+ * codex-plugins/kimi-code-plugins) plus each target's own hook docs:
+ * Codex's Stop wiring is a plain `hook codex core` with no short-circuit;
+ * claude-code's core-guards hooks.json carries a second Stop entry WITHOUT
+ * `--sound` that reaches `prdStopGate` via `src/runtime/lifecycle/dispatch.ts`
+ * (the `--sound stop` entry only plays the sound in `maybePlaySound()`);
+ * Kimi's Stop hook carries `--sound stop`, which exits in `maybePlaySound()`
+ * (`src/cli/hook-sound.ts`) before stdin is ever read, and
+ * hermes/gemini-cli/cline have no event literally named
  * `Stop` in their own documented hook taxonomy at all. See prd.md's Known
  * limitations for the full measurement.
  */

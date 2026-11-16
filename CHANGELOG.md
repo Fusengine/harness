@@ -4,6 +4,24 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.121] - 2026-11-16
+
+### Added
+
+- **prd: `harness prd init` bootstraps the router** — `harness prd init [--task <id>] [--id <harness>] [--root <dir>]` creates `.claude/apex/prd.json` so the lead can then write the task PRD; the protected-path guard (`protectedPathGuard`) is unchanged. Tests: `prd-init`, `prd-init-guards`.
+
+### Fixed
+
+- **prd: order-independent report slot claim that survives a new lead session** — an agent claims any open report slot regardless of completion order; slots already reported complete are closed on disk and cannot be rewritten by a new agent; a resume in a fresh lead session can claim the remaining slots; concurrent claims are serialized by a claim lock. Tests: `prd-claim`, `prd-claim-order`, `prd-resume`, `prd-pre-gate-matrix`, `prd-report-content`, `prd-stop-compact-hint`.
+
+### Documentation
+
+- **docs/prd.md** — namespaced agent names (`plugin:agent`, `-2`, `-3` slots), `prd init --id`, resume in a fresh lead session, Stop wiring corrected.
+
+### Known limitations
+
+- Pre-existing, not changed by this release: Bash write verbs (`ln -sf`, `cp` after `cd`, `rsync`, `truncate`) targeting PRD report files are not yet guarded.
+
 ## [0.1.120] - 2026-11-15
 
 ### Added
