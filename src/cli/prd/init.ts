@@ -49,9 +49,15 @@ function createExclusive(path: string, text: string): boolean {
   }
 }
 
+/** The absolute agents-dir hint, printed identically on creation and on a re-run. */
+function agentsDirLine(root: string, homeSeg: string): string {
+  return `prd init: agent reports go in ${dirname(prdAgentReportPath(root, homeSeg, "x"))}/<agent>-prd.json (absolute path — never <project>/prd/agents/)\n`;
+}
+
 /**
  * Outcome for a router that already exists (or appeared concurrently): 0 when valid and it
- * holds `task` (or none was asked), 1 otherwise. Never writes.
+ * holds `task` (or none was asked), 1 otherwise. Never writes — a re-run prints `exists`
+ * plus the same agents-dir line as on creation.
  */
 function existingRouterCode(root: string, homeSeg: string, task: string | undefined): number {
   const path = prdRouterPath(root, homeSeg);
@@ -64,7 +70,7 @@ function existingRouterCode(root: string, homeSeg: string, task: string | undefi
     process.stderr.write(`prd init: router ${path} exists without task "${task}" — add it with a Write (init never rewrites an existing router)\n`);
     return 1;
   }
-  process.stdout.write(`prd init: router already present at ${path}\n`);
+  process.stdout.write(`prd init: exists ${path}${task ? ` with task "${task}"` : ""}\n${agentsDirLine(root, homeSeg)}`);
   return 0;
 }
 
@@ -91,7 +97,7 @@ export async function runPrdInit(argv: string[], cwd: string, env: NodeJS.Proces
     try {
       if (createExclusive(prdRouterPath(root, homeSeg), initialRouterText(task))) {
         process.stdout.write(`prd init: created ${prdRouterPath(root, homeSeg)}${task ? ` with task "${task}"` : ""}\n`);
-        process.stdout.write(`prd init: agent reports go in ${dirname(prdAgentReportPath(root, homeSeg, "x"))}/<agent>-prd.json (absolute path — never <project>/prd/agents/)\n`);
+        process.stdout.write(agentsDirLine(root, homeSeg));
         return 0;
       }
     } catch (err) {

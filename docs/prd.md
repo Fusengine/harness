@@ -310,7 +310,9 @@ exit `2` with `... — pass --id <harness>`.
   with `{ "<id>": { "prd": "prd/<id>-prd.json", "status": "assigned" } }`;
   `<id>` must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, and `--task=foo`
   (equals form) is rejected — pass `--task foo`. Without `--task` the router
-  is `{}`. Exit `0` when created or already valid (and holding `--task`,
+  is `{}`. Idempotent: a re-run (any agent may run it) writes nothing and
+  prints `prd init: exists <path>[ with task "<id>"]` plus the same absolute
+  agents-dir line as on creation. Exit `0` when created or already valid (and holding `--task`,
   if given); `1` when `FUSE_PRD` is missing, the router is malformed (never
   touched), the router exists without that task (add it with a `Write` —
   `init` never rewrites it), or creation failed; `2` for usage errors.
@@ -334,7 +336,7 @@ Exit codes and the exact messages, as measured:
 | `init`/`validate`/`compact` without `FUSE_PRD=1` | any of the three | `1` | `` prd <sub> requires FUSE_PRD=1 in <homeSeg>/.env or the project .env `` |
 | `init` with an invalid `--task` (incl. `--task=foo`) | `init` | `2` | `usage: harness prd init [--task <id>] [--id <harness>] [--root <dir>] — <id> must match /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/` |
 | `init`, no `--id`, zero/several home dirs | `init` | `2` | `<no harness home directory\|several harness home directories (...)> under <root> — pass --id <harness>` |
-| `init`, router already present and valid | `init` | `0` | (stdout) `prd init: router already present at <path>` |
+| `init`, router already present and valid (holding `--task` if given) | `init` | `0` | (stdout, nothing written) `prd init: exists <path>[ with task "<id>"]` + the same `prd init: agent reports go in <abs>/<agent>-prd.json ...` line as on creation |
 | `init`, router exists without `--task` | `init` | `1` | `prd init: router <path> exists without task "<task>" — add it with a Write (init never rewrites an existing router)` |
 | `init`, router malformed | `init` | `1` | `prd init: <router state description>` — file untouched |
 | `init`, cannot create | `init` | `1` | `prd init: cannot create router: <error>` |

@@ -3,13 +3,31 @@
  * Deliberately independent of `test/helpers/prd-env.ts` (Lot D) to avoid a
  * cross-lot coupling edge during parallel development.
  */
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /** A fresh `mkdtemp`-scoped root dir (caller is responsible for cleanup). */
 export function tmpRoot(): string {
   return mkdtempSync(join(tmpdir(), "fh-prd-cli-"));
+}
+
+/** Per-file tracker of {@link tmpRoot} dirs: `root()` creates one, `cleanup()` (an `afterEach`) removes them all. */
+export function tmpRootTracker(): { root: () => string; cleanup: () => void } {
+  const roots: string[] = [];
+  return {
+    root: () => {
+      const dir = tmpRoot();
+      roots.push(dir);
+      return dir;
+    },
+    cleanup: () => {
+      while (roots.length > 0) {
+        const dir = roots.pop();
+        if (dir) rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  };
 }
 
 function writeJson(path: string, data: unknown): void {

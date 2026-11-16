@@ -4,6 +4,20 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.123] - 2026-11-16
+
+### Fixed
+
+- **prd: `prd init` is idempotent** — on an existing, valid router (holding the task when `--task` is given), `harness prd init` writes nothing and prints `prd init: exists <router> [with task "<id>"]` plus the same absolute agents-dir line as on creation, exit 0. A router without the task, a malformed router and a missing `FUSE_PRD` are unchanged (exit 1). No identity check: sub-agents may run `init`. Tests: `prd-init-idempotent`.
+
+### Documentation
+
+- **docs/prd.md, README.md** — idempotent `init` output; real-condition run report `docs/reports/2026-11-16-prd-init-idempotent-real-run.md` (Codex: second init → `exists` + agents line, rc 0, router/task PRD/reports sha256 identical before/after, validate exit 0).
+
+### Notes
+
+- The repeated `created` reported in Codex runs was not reproduced: those were rollout copies of a single `init` (measured by unique `call_id`).
+
 ## [0.1.122] - 2026-11-16
 
 ### Fixed
