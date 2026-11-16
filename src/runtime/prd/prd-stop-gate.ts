@@ -88,11 +88,14 @@ function compactHintText(tasks: string[]): string {
  * `Stop` `additionalContext` channel. Whether this function is ever REACHED
  * for a given id is a wiring question, not a code question: measured live
  * against the real hooks.json this project ships (claude-plugins/
- * codex-plugins/kimi-code-plugins) plus each target's own hook docs — only
+ * codex-plugins/kimi-code-plugins) plus each target's own hook docs —
  * Codex's Stop wiring is a plain `hook codex core` with no short-circuit;
- * claude-code's and Kimi's own Stop hook always carries `--sound stop`,
- * which exits in `maybePlaySound()` (`src/cli/hook-sound.ts`) before stdin
- * is ever read, and hermes/gemini-cli/cline have no event literally named
+ * claude-code's core-guards hooks.json carries a second Stop entry WITHOUT
+ * `--sound` that reaches this gate via `src/runtime/lifecycle/dispatch.ts`
+ * (the `--sound stop` entry only plays the sound in `maybePlaySound()`);
+ * Kimi's Stop hook carries `--sound stop`, which exits in `maybePlaySound()`
+ * (`src/cli/hook-sound.ts`) before stdin is ever read, and
+ * hermes/gemini-cli/cline have no event literally named
  * `Stop` in their own documented hook taxonomy at all — see prd.md's Known
  * limitations for the full measurement. One-shot per session, on a marker
  * key DISTINCT from the block-once key so neither shadows the other.
