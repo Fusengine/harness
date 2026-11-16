@@ -28,7 +28,7 @@ export {
 
 export { canPromoteRouterEntry, compactAgentEntry, compactTaskFile } from "./prd-compact";
 
-export { agentSlice, agentSlices, joinContextResponses, renderAgentSliceMarkdown } from "./prd-context";
+export { agentSlice, agentSlices, joinContextResponses, renderAgentSliceMarkdown, type PrdSliceContext } from "./prd-context";
 
 export {
   readAgentReport, readAgentReportSync, readAllTaskFiles, readRouter, readRouterSnapshotSync,

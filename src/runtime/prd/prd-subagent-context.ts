@@ -54,7 +54,7 @@ export function prdSubagentContext(payload: Record<string, unknown>, cwd: string
   }
   if (slices.length === 0) return "";
 
-  const text = `${renderAgentSliceMarkdown(slices)}\n\n### Rules\n${RULES}`;
+  const text = `${renderAgentSliceMarkdown(slices, { root, homeSeg })}\n\n### Rules\n${RULES}`;
   // gemini-cli/cline don't understand Claude's hookSpecificOutput.additionalContext
   // envelope: gemini-cli's native shape has no hookEventName field and cline's
   // is `{contextModification}` entirely — route them through respond()'s

@@ -5,7 +5,7 @@ import { joinContextResponses } from "../../../src/policy/prd";
 import { setupPrdEnv } from "./env";
 
 /** Exact pre-`agentSlices` output for the unambiguous case (captured live, single candidate) — pinned so the switch to `agentSlices` provably never touches this path. */
-const UNAMBIGUOUS_BYTES = "{\"hookSpecificOutput\":{\"hookEventName\":\"SubagentStart\",\"additionalContext\":\"## PRD assignment — task auth-refactor\\nYour files: src/auth/session.ts\\nYour sub-tasks: session-store\\nReport to prd/agents/backend-expert-2-prd.json when done.\\n\\n### Rules\\n1. Write ONLY the files listed in your slice above.\\n2. Report completion to YOUR OWN agent-report file above — never another agent's.\\n3. Do not mark a sub-task done until the work is actually finished; the coordinator validates from your report.\"}}";
+const unambiguousBytes = (root: string, homeSeg = ".claude"): string => "{\"hookSpecificOutput\":{\"hookEventName\":\"SubagentStart\",\"additionalContext\":\"## PRD assignment — task auth-refactor\\nYour files: src/auth/session.ts\\nYour sub-tasks: session-store\\nReport to " + root + "/" + homeSeg + "/apex/prd/agents/backend-expert-2-prd.json when done (absolute path — never <project>/prd/agents/).\\n\\n### Rules\\n1. Write ONLY the files listed in your slice above.\\n2. Report completion to YOUR OWN agent-report file above — never another agent's.\\n3. Do not mark a sub-task done until the work is actually finished; the coordinator validates from your report.\"}}";
 
 describe("B3 — SubagentStart PRD slice injection", () => {
   test("agent_type=backend-expert-2 (unique candidate): output byte-identical to before the agentSlices switch", () => {
@@ -13,7 +13,7 @@ describe("B3 — SubagentStart PRD slice injection", () => {
     try {
       process.env.FUSE_PRD = "1";
       const out = prdSubagentContext({ agent_type: "backend-expert-2" }, env.root, "claude-code");
-      expect(out).toBe(UNAMBIGUOUS_BYTES);
+      expect(out).toBe(unambiguousBytes(env.root));
     } finally {
       delete process.env.FUSE_PRD;
       env.restore();
@@ -108,7 +108,7 @@ describe("B3 non-regression — byte-identical output for the 5 protected target
     try {
       process.env.FUSE_PRD = "1";
       const out = prdSubagentContext({ agent_type: "backend-expert-2" }, env.root, id);
-      expect(out).toBe(UNAMBIGUOUS_BYTES);
+      expect(out).toBe(unambiguousBytes(env.root, homeSeg));
     } finally {
       delete process.env.FUSE_PRD;
       env.restore();
