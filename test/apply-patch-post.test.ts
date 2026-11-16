@@ -66,14 +66,18 @@ test("handlePost solid scope: one oversized file among an apply_patch batch deni
   const small = join(cwd, "small.ts");
   writeFileSync(small, "const a = 1;\n");
   const ctx = ctxFor(cwd, base({ files: [{ filePath: small, content: "const a = 1;\n", op: "add" }, { filePath: big, content: "", op: "update" }] }), "solid");
-  const saved = process.env.SOLID_PROJECT_TYPE;
-  process.env.SOLID_PROJECT_TYPE = "generic";
+  // Hermetic: the 150-line fixture assumes the 100-line default; a shell exporting SOLID_FILE_LIMIT=200 must not change the verdict.
+  const pinned = { SOLID_PROJECT_TYPE: "generic", SOLID_FILE_LIMIT: "100" } as const;
+  const saved = Object.fromEntries(Object.keys(pinned).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, pinned);
   try {
     const out = await handlePost(ctx);
     expect(out.stdout).toContain("SOLID");
   } finally {
-    if (saved === undefined) delete process.env.SOLID_PROJECT_TYPE;
-    else process.env.SOLID_PROJECT_TYPE = saved;
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
 });
 
