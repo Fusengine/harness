@@ -19,3 +19,6 @@ docs/api/
 .env.*
 !.env.example
 .cartographer
+# Kimi tool state (local, not package content)
+.kimi/
+.kimi-code/
