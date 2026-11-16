@@ -15,10 +15,14 @@ import { existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { atomicWrite } from "../util/json-io";
 import { emptyTrack, type SessionTrack } from "./session-state";
-import { computeMac, loadOrCreateKey, signTrack, verifyTrack, writeLastNonce, type TrackEnvelope } from "./integrity";
+import { readKey, signTrack, verifyEnvelope, verifyTrack, writeLastNonce, type TrackEnvelope } from "./integrity";
 import { foldEvents, type TrackEvent } from "./track-journal";
+import { GENESIS, journalLogPath, lineMacOk, parseLine, sealOf, sidOf, snapshotPathOf, type ChainPos } from "./track-chain";
+import { readTrackReport, verifyJournal, walkChain } from "./track-verify";
 import { withTrackLock } from "./track-lock";
-import { captureSpills, dropFiles, listCapturedSpills, listSpills, readSpillTexts, releaseSpills } from "./track-spill";
+import { captureSpills, dropFiles, listCapturedSpills, listSpills, releaseSpills } from "./track-spill";
+
+export { journalLogPath } from "./track-chain";
 
 /** Compact when the log exceeds this size (bytes). */
 export const COMPACT_BYTES: number = 128 * 1024;
@@ -26,38 +30,12 @@ export const COMPACT_BYTES: number = 128 * 1024;
 /** Folded-spill nonces remembered in the snapshot (recovery only needs the last compaction's). */
 const FOLDED_SPILLS_CAP = 2048;
 
-/** The journal log path twin of a track snapshot path. */
-export function journalLogPath(trackPath: string): string {
-  return trackPath.replace(/\.json$/, ".log");
-}
-
-/** Parse & MAC-verify journal text; malformed or tampered lines are skipped. */
-export function parseEvents(text: string): TrackEvent[] {
-  const key = loadOrCreateKey(), out: TrackEvent[] = [];
-  for (const line of text.split("\n")) {
-    if (!line) continue;
-    try {
-      const ev = JSON.parse(line) as TrackEvent;
-      if (ev?.v !== 1 || typeof ev.nonce !== "string" || typeof ev.ts !== "number") continue;
-      if (ev.mac !== computeMac(key, JSON.stringify({ field: ev.field, op: ev.op, value: ev.value, ts: ev.ts }), ev.nonce)) continue; // fail-closed per line
-      out.push(ev);
-    } catch { /* skip the bad line, keep the rest */ }
-  }
-  return out;
-}
-
-/** Read & verify every event of a log PLUS its pending spill files (lock-free overflow, see track-spill.ts); absent/unreadable → [] (fail-open read). Deduped by nonce (an event is never counted twice); order = log, then spills (chronological) — foldEvents sorts stably on ts. */
+/** The verified events of a log (chain-checked, see track-verify) PLUS its pending spills; a failed verification → [] (the explicit reason: {@link verifyJournal}). The snapshot is taken from the log's `.json` twin. */
 export function readEvents(logPath: string): TrackEvent[] {
-  let main: TrackEvent[] = [];
-  try { main = parseEvents(readFileSync(logPath, "utf8")); } catch { /* no log */ }
-  const seen = new Set<string>(), out: TrackEvent[] = [];
-  for (const ev of [...main, ...readSpillTexts(logPath).flatMap(parseEvents)]) {
-    if (!seen.has(ev.nonce)) { seen.add(ev.nonce); out.push(ev); }
-  }
-  return out;
+  return verifyJournal(snapshotPathOf(logPath)).events;
 }
 
-/** Verified legacy snapshot only (fail-closed → emptyTrack), sync. */
+/** Verified snapshot for the legacy (journal off) path: absent → empty; present but unverifiable (incl. no key — never created here) → empty (fail closed), sync. */
 function readSnapshotSync(file: string): SessionTrack {
   try {
     return verifyTrack(JSON.parse(readFileSync(file, "utf8")) as TrackEnvelope) ?? emptyTrack();
@@ -66,26 +44,47 @@ function readSnapshotSync(file: string): SessionTrack {
   }
 }
 
-/** Sync snapshot ⊕ journal read for the sync gates; `journal=false` = legacy kill-switch path. */
+/** Sync snapshot ⊕ journal read for the sync gates; `journal=false` = legacy kill-switch path. A journal that fails verification reads as an EMPTY track carrying `integrityFailure` (never as the stale/rolled-back snapshot). */
 export function readTrackSync(file: string, journal: boolean): SessionTrack {
-  const base = readSnapshotSync(file);
-  return journal ? foldEvents(readEvents(journalLogPath(file)), base) : base;
+  return journal ? readTrackReport(file).track : readSnapshotSync(file);
 }
 
-/** Fold captured files (`.folding` log and/or captured spills) into the signed snapshot (signTrack + nonce, unchanged). Raw read, no spill discovery. */
+/** Strict snapshot read for the fold: absent → empty; unverifiable → throw (never overwrite a tampered snapshot with a laundered fold). */
+function readSnapshotStrict(file: string, key: string, sid: string): { track: SessionTrack; mac?: string } {
+  if (!existsSync(file)) return { track: emptyTrack() };
+  const env = JSON.parse(readFileSync(file, "utf8")) as TrackEnvelope;
+  const t = verifyEnvelope(env, key);
+  if (!t) throw new Error("fuse: snapshot MAC mismatch, fold aborted");
+  if (t.chainHead && t.chainHead.sid !== sid) throw new Error("fuse: snapshot bound to another session, fold aborted");
+  return { track: t, mac: t.chainHead ? undefined : env.mac }; // a legacy snapshot's MAC is part of the seal
+}
+
+/** Fold captured files (`.folding` log and/or captured spills) into the signed snapshot (signTrack + nonce, unchanged), carrying the chain head forward. The captured log is chain-verified FIRST: a break aborts the fold (nothing is laundered — the tampered state stays on disk and keeps failing). Raw read, no spill discovery. */
 function foldIntoSnapshot(file: string, captured: string[]): void {
-  const base = readSnapshotSync(file);
+  const key = readKey();
+  if (key === null) throw new Error("fuse: no key, fold aborted");
+  const sid = sidOf(journalLogPath(file)), { track: base, mac: snapMac } = readSnapshotStrict(file, key, sid);
+  const start: ChainPos = base.chainHead ?? { seq: 0, mac: GENESIS };
   const done = new Set(base.foldedSpills ?? []);
-  const seen = new Set<string>(), events: TrackEvent[] = [], spillNonces: string[] = [];
-  for (const p of captured) {
-    const isSpill = p.includes(".spill."); // the `.folding` LOG capture has no `.spill.` in its name
-    for (const e of parseEvents(readFileSync(p, "utf8"))) {
-      if (seen.has(e.nonce) || (isSpill && done.has(e.nonce))) continue; // idempotent re-fold of a crashed compaction
-      seen.add(e.nonce); events.push(e);
-      if (isSpill) spillNonces.push(e.nonce);
+  const isSpill = (p: string): boolean => p.includes(".spill."); // the `.folding` LOG capture has no `.spill.` in its name
+  const spillTexts = captured.filter(isSpill).map((p) => readFileSync(p, "utf8"));
+  const walk = walkChain(captured.filter((p) => !isSpill(p)).map((p) => readFileSync(p, "utf8")), key, sid, start, spillTexts, snapMac); // seq <= start.seq (crashed-compaction re-fold) are skipped
+  if (walk.failure) throw new Error(`fuse: chain ${walk.failure.reason}, fold aborted`);
+  const seen = new Set<string>(walk.events.map((e) => e.nonce)), events: TrackEvent[] = [...walk.events], spillNonces: string[] = [];
+  const sealed = start.mac !== GENESIS; // a session-unbound v1 spill line is only trusted while unsealed (or matched into the seal digest by the walk above)
+  for (const text of spillTexts) {
+    for (const line of text.split("\n")) {
+      const e = line ? parseLine(line) : null;
+      if (!e || seen.has(e.nonce) || done.has(e.nonce) || !lineMacOk(key, e) || (e.v === 1 && sealed) || (e.v === 2 && (e.sid !== sid || e.seq !== undefined))) continue; // idempotent re-fold
+      seen.add(e.nonce); events.push(e); spillNonces.push(e.nonce);
     }
   }
   const folded = foldEvents(events, base);
+  // chain head after the fold: the last chained line, else — an unchained prefix only — its seal (the SAME digest a chained line appended before this fold expects, see chainTip), else unchanged
+  const absorbedV1 = events.filter((e) => e.v === 1 && spillNonces.includes(e.nonce)).map((e) => e.mac);
+  // (every snapshot THIS code writes carries a head, so it is never mistaken for a legacy snapshot — whose MAC would then enter the seal)
+  const head: ChainPos = walk.tip.seq > start.seq ? walk.tip : start.mac === GENESIS ? { seq: 0, mac: sealOf(snapMac, walk.legacyMacs, absorbedV1) } : start;
+  folded.chainHead = { ...head, sid };
   // same atomic write as the events; the cap never truncates below one whole fold
   if (spillNonces.length) folded.foldedSpills = [...(base.foldedSpills ?? []), ...spillNonces].slice(-Math.max(FOLDED_SPILLS_CAP, spillNonces.length));
   const envelope = signTrack(folded);

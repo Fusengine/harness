@@ -87,4 +87,4 @@ process.stdout.write("DONE " + Date.now() + "\\n");`;
       else process.env.FUSE_TRACK_COMPACT_BYTES = prevCap;
     }
   });
-});
+}, 30_000); // each append is chained (+tail read, +head write ≈ 0.2 ms): the 22k-line setup outgrew the 5 s default

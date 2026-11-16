@@ -33,6 +33,10 @@ export interface SessionTrack {
   prdStopBlocked?: Record<string, number>;
   /** Nonces of spill events already folded into this snapshot (capped, newest last) — makes a crashed-compaction re-fold idempotent (track-compact). */
   foldedSpills?: string[];
+  /** Hash-chain head of the last journal event folded into this snapshot (`seq` + that line's MAC): the next chained line continues from it, and a rolled-back snapshot no longer matches the log (track-chain/track-verify). Absent on a snapshot predating the chain (legacy). */
+  chainHead?: { seq: number; mac: string; sid?: string };
+  /** In-memory only, never persisted: set by the journal read when integrity verification FAILED (the track is then empty — fail closed). Value = the explicit reason. */
+  integrityFailure?: string;
 }
 
 /** One PRD cross-check violation, timestamped for the journal/dedup. */

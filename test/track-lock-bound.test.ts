@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { loadTrack } from "../src/tracking/store";
 import { appendEvent, signEvent } from "../src/tracking/track-journal";
 import { journalLogPath, maybeCompactJournal } from "../src/tracking/track-compact";
+import { sidOf } from "../src/tracking/track-chain";
 import { captureSpills, listCapturedSpills, listSpills, spillEvent } from "../src/tracking/track-spill";
 import { LOCK_FAILED, withTrackLockSyncBlocking } from "../src/tracking/track-lock-sync";
 import { resolveTrackLockBudgetMs } from "../src/config/limits";
@@ -61,7 +62,7 @@ test("compaction absorbs spills: snapshot holds them, spill files deleted only a
   await withEnv(undefined, async () => {
     const d = dir(), file = join(d, "track.json"), log = journalLogPath(file);
     appendEvent(log, "agents", "append", { n: "log" }, BASE);
-    for (let i = 0; i < 3; i++) spillEvent(log, signEvent("agents", "append", { n: `s${i}` }, BASE + 1 + i)!);
+    for (let i = 0; i < 3; i++) spillEvent(log, signEvent("agents", "append", { n: `s${i}` }, BASE + 1 + i, sidOf(log))!);
     expect((await loadTrack(file)).agents.length).toBe(4); // log + spills visible pre-compaction
     await maybeCompactJournal(file); // spills alone trigger the absorb
     expect(listSpills(log).length + listCapturedSpills(log).length).toBe(0);
@@ -73,7 +74,7 @@ test("compaction absorbs spills: snapshot holds them, spill files deleted only a
 test("crash AFTER the snapshot write but BEFORE the spill unlink: recovery re-fold is idempotent (no double count)", async () => {
   await withEnv(undefined, async () => {
     const d = dir(), file = join(d, "track.json"), log = journalLogPath(file);
-    for (let i = 0; i < 3; i++) spillEvent(log, signEvent("agents", "append", { n: `s${i}` }, BASE + i)!);
+    for (let i = 0; i < 3; i++) spillEvent(log, signEvent("agents", "append", { n: `s${i}` }, BASE + i, sidOf(log))!);
     const keep = listSpills(log);
     for (const p of keep) copyFileSync(p, `${p}.bak`);
     await maybeCompactJournal(file); // folds + deletes: the snapshot now holds s0..s2
@@ -90,7 +91,7 @@ test("crash between spill write and fold loses nothing (pending, captured, and h
   await withEnv(undefined, async () => {
     const d = dir(), file = join(d, "track.json"), log = journalLogPath(file);
     appendEvent(log, "agents", "append", { n: "base" }, BASE);
-    spillEvent(log, signEvent("agents", "append", { n: "crash1" }, BASE + 1)!);
+    spillEvent(log, signEvent("agents", "append", { n: "crash1" }, BASE + 1, sidOf(log))!);
     writeFileSync(`${log}.spill.${BASE}-1-abc.tmp`, '{"truncated'); // crash mid-write: never published
     expect((await loadTrack(file)).agents.length).toBe(2); // pending spill survives, tmp ignored
     captureSpills(log); // crash AFTER capture, BEFORE fold: events live only in `.folding`
