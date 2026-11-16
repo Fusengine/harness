@@ -24,6 +24,7 @@ import { projectLayout } from "../../config/layout";
 import { harnessHomeSegment } from "../../policy/apex-target";
 import { shellOutputRedirects } from "../../policy/guards/bash-write-redirects";
 import { extraBashWriteTargets } from "./prd-bash-targets";
+import { eventOutsideReportDeny } from "./prd-outside-report";
 import {
   classifyPrdPath, evaluateWriteOwnership, isPrdEnabled, isPrdScopedPath,
   prdProjectRoot, readAllTaskFiles, readRouterSnapshotSync,
@@ -67,6 +68,10 @@ export async function prdPreGate(
   // must share ONE representation before any comparison (prd-canon.ts).
   const root = canonicalRoot(prdProjectRoot(cwd));
   const homeSeg = harnessHomeSegment(id);
+
+  // Path rule first (before any router state is read, so a broken router never skips it).
+  const outside = eventOutsideReportDeny(event, root, homeSeg);
+  if (outside !== null) return denyOutcome(id, event, trackFilePath, now, outside);
 
   if (event.tool === "Bash" && event.command) {
     const redirectHit = shellOutputRedirects(event.command).some((r) => isPrdScopedPath(canonicalFilePath(r.target), root, homeSeg));

@@ -3,6 +3,7 @@
  * PRD assignment, never the whole task. Pure — no fs.
  */
 import { candidateAgentNames } from "./prd-ownership";
+import { prdAgentReportPath } from "./prd-paths";
 import { filesOf, subTasksOf } from "./prd-schema";
 import type { PrdSubagentSlice, PrdTaskFile } from "./interfaces/types";
 
@@ -32,12 +33,25 @@ export function agentSlice(taskFile: PrdTaskFile, agentType: string, task: strin
   return slices.length === 1 ? (slices[0] ?? null) : null;
 }
 
-function renderSliceBlock(s: PrdSubagentSlice): string {
+/** Where the host's PRD tree lives, so the slice can name the report path absolutely. */
+export interface PrdSliceContext {
+  /** Project root (`prdProjectRoot`). */
+  root: string;
+  /** Host home-dir segment (`harnessHomeSegment`), e.g. `.codex`. */
+  homeSeg: string;
+}
+
+function reportLine(s: PrdSubagentSlice, ctx?: PrdSliceContext): string {
+  if (!ctx) return `Report to prd/agents/${s.agent}-prd.json when done.`;
+  return `Report to ${prdAgentReportPath(ctx.root, ctx.homeSeg, s.agent)} when done (absolute path — never <project>/prd/agents/).`;
+}
+
+function renderSliceBlock(s: PrdSubagentSlice, ctx?: PrdSliceContext): string {
   return [
     `## PRD assignment — task ${s.task}`,
     `Your files: ${s.files.join(", ")}`,
     `Your sub-tasks: ${s.subTasks.join(", ")}`,
-    `Report to prd/agents/${s.agent}-prd.json when done.`,
+    reportLine(s, ctx),
   ].join("\n");
 }
 
@@ -46,8 +60,10 @@ function renderSliceBlock(s: PrdSubagentSlice): string {
  * report path. When 2+ slices share the same `task` (an ambiguous
  * `agentSlices` result), prefixes that group with an explicit
  * disambiguation header instead of silently rendering as if unambiguous.
+ * @param ctx - When given, the report path is rendered absolute (the host's real
+ * `<root>/<homeSeg>/apex/prd/agents/…`); absent, the legacy relative text.
  */
-export function renderAgentSliceMarkdown(slices: PrdSubagentSlice[]): string {
+export function renderAgentSliceMarkdown(slices: PrdSubagentSlice[], ctx?: PrdSliceContext): string {
   const byTask = new Map<string, PrdSubagentSlice[]>();
   for (const s of slices) {
     const group = byTask.get(s.task);
@@ -63,7 +79,7 @@ export function renderAgentSliceMarkdown(slices: PrdSubagentSlice[]): string {
         + "The first report you write binds your name; write only that report.",
       );
     }
-    for (const s of group) blocks.push(renderSliceBlock(s));
+    for (const s of group) blocks.push(renderSliceBlock(s, ctx));
   }
   return blocks.join("\n\n");
 }

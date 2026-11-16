@@ -8,7 +8,7 @@
 import { linkSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import { prdRouterPath } from "../../policy/prd/prd-paths";
+import { prdAgentReportPath, prdRouterPath } from "../../policy/prd/prd-paths";
 import { readRouterSnapshotSync } from "../../policy/prd/prd-io";
 import { classifyRouterText, describeRouterState } from "../../policy/prd/prd-router-state";
 import type { PrdRouter } from "../../policy/prd/interfaces/types";
@@ -91,6 +91,7 @@ export async function runPrdInit(argv: string[], cwd: string, env: NodeJS.Proces
     try {
       if (createExclusive(prdRouterPath(root, homeSeg), initialRouterText(task))) {
         process.stdout.write(`prd init: created ${prdRouterPath(root, homeSeg)}${task ? ` with task "${task}"` : ""}\n`);
+        process.stdout.write(`prd init: agent reports go in ${dirname(prdAgentReportPath(root, homeSeg, "x"))}/<agent>-prd.json (absolute path — never <project>/prd/agents/)\n`);
         return 0;
       }
     } catch (err) {
