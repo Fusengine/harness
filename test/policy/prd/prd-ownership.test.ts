@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
-  candidateAgentNames, evaluateWriteOwnership, matchesAgentName, resolveOwnerBinding,
+  candidateAgentNames, evaluateWriteOwnership, matchesAgentName,
 } from "../../../src/policy/prd/prd-ownership";
+import { resolveClaim } from "../../../src/policy/prd/prd-claim";
 import type { PrdIdentity, PrdTaskFile } from "../../../src/policy/prd/interfaces/types";
 
 describe("matchesAgentName", () => {
@@ -36,24 +37,19 @@ describe("candidateAgentNames", () => {
   });
 });
 
-describe("resolveOwnerBinding", () => {
-  test("already bound to the same id", () => {
-    const result = resolveOwnerBinding(["a", "b"], "id-1", { "id-1": "a" });
-    expect(result).toEqual({ name: "a", alreadyBound: true });
+describe("resolveClaim (replaces resolveOwnerBinding; full matrix in prd-claim.test.ts)", () => {
+  const base = { agentType: "x", candidates: ["a", "b"], closed: false };
+  test("already bound to the same slot -> allow, no new bind", () => {
+    expect(resolveClaim({ ...base, target: "a", agentId: "id-1", bindings: { "id-1": "a" } })).toEqual({ allow: true });
   });
-  test("bound to a different id -> excluded, other candidate free", () => {
-    const result = resolveOwnerBinding(["a", "b"], "id-2", { "id-1": "a" });
-    expect(result).toEqual({ name: "b", alreadyBound: false });
+  test("two free candidates -> either may be claimed (no ambiguity)", () => {
+    expect(resolveClaim({ ...base, target: "b", agentId: "id-1", bindings: {} })).toEqual({ allow: true, bind: { agentId: "id-1", name: "b" } });
   });
-  test("single free candidate binds", () => {
-    const result = resolveOwnerBinding(["a"], "id-1", {});
-    expect(result).toEqual({ name: "a", alreadyBound: false });
+  test("slot bound to a different id -> denied", () => {
+    expect(resolveClaim({ ...base, target: "a", agentId: "id-2", bindings: { "id-1": "a" } }).allow).toBe(false);
   });
-  test("two free candidates -> ambiguous, null", () => {
-    expect(resolveOwnerBinding(["a", "b"], "id-1", {})).toBeNull();
-  });
-  test("zero candidates -> null", () => {
-    expect(resolveOwnerBinding([], "id-1", {})).toBeNull();
+  test("zero candidates -> denied", () => {
+    expect(resolveClaim({ ...base, candidates: [], target: "a", agentId: "id-1", bindings: {} }).allow).toBe(false);
   });
 });
 
@@ -88,12 +84,19 @@ describe("evaluateWriteOwnership", () => {
     });
     expect(verdict).toEqual({ allow: true, bind: { agentId: "id-1", name: "backend-expert" } });
   });
-  test("agentReport: sub denied when target belongs to a different agent name", () => {
+  test("agentReport: sub denied when target is not a slot of its agent_type", () => {
+    const verdict = evaluateWriteOwnership({
+      kind: { kind: "agentReport", agent: "backend-expert-2" },
+      identity: sub("frontend-expert"), taskFile, bindings: {},
+    });
+    expect(verdict.allow).toBe(false);
+  });
+  test("agentReport: a -n slot may be claimed before the exact name (order-independent)", () => {
     const verdict = evaluateWriteOwnership({
       kind: { kind: "agentReport", agent: "backend-expert-2" },
       identity: sub("backend-expert"), taskFile, bindings: {},
     });
-    expect(verdict.allow).toBe(false);
+    expect(verdict).toEqual({ allow: true, bind: { agentId: "id-1", name: "backend-expert-2" } });
   });
   test("agentReport: sub denied when already bound to a different agentId", () => {
     const verdict = evaluateWriteOwnership({

@@ -6,10 +6,10 @@
  * lands under `<root>/.fuse-harness/state/...`, inside the disposable tmp
  * tree `cleanup()` removes.
  */
-import { existsSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defaultStateDir, trackFile } from "../../../src/runtime/paths";
-import { prdRouterPath, prdTaskPath } from "../../../src/policy/prd";
+import { prdAgentReportPath, prdRouterPath, prdTaskPath } from "../../../src/policy/prd";
 import { createPrdEnv, type PrdEnv } from "../../helpers/prd-env";
 
 /**
@@ -40,6 +40,15 @@ export function seedCrossCheckViolation(root: string, homeSeg: string): void {
 function fixupRouterFilename(root: string, homeSeg: string): void {
   const wrongPath = join(root, homeSeg, "apex", "router.json");
   if (existsSync(wrongPath)) renameSync(wrongPath, prdRouterPath(root, homeSeg));
+}
+
+/**
+ * The shared fixture ships `backend-expert`'s report COMPLETE on disk, i.e. a
+ * CLOSED slot (a fresh agent may not claim it). Tests that need a fresh agent
+ * to claim that exact slot reopen it first by removing the report.
+ */
+export function reopenFixtureSlot(root: string, homeSeg: string, agent = "backend-expert"): void {
+  rmSync(prdAgentReportPath(root, homeSeg, agent), { force: true });
 }
 
 /** One isolated PRD test environment: populated project root, temp HOME, and its session track path. */

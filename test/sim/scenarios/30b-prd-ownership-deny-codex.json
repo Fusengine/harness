@@ -1,7 +1,7 @@
 {
   "name": "prd-ownership-deny-codex",
   "harness": "codex",
-  "doc": "Same target behavior as 30-prd-ownership-deny-claude, spawned as `hook codex core` — proves the future PRD ownership guard is harness-shared, not claude-only (prd-design.md §2.1 runs in the core-scope dispatch, same as Claude). Codex's deny envelope is the SAME denyResponse() shape as Claude (adapters/codex/index.ts re-exports it — hookSpecificOutput.permissionDecision), so the assertion form matches scenario 19's codex-shares-guards-deny precedent. RED TODAY BY DESIGN, verified live 2026-09-02: unlike Claude, `.claude/apex/` in protected-path.ts's PROTECTED_FRAGMENTS is a HARDCODED literal, not homeSeg-aware — Codex's own home segment is `.codex` (harnessHomeSegment, apex-target.ts), which that fragment list never mentions. So TODAY a Codex write under `.codex/apex/prd/agents/...` is NOT blocked at all (genuine allow, permission decision absent from stdout) — the true 'no deny emitted' case the PRD design assumed universally, but which only actually holds for codex/cursor/kimi, not claude-code (see 30's own doc note).",
+  "doc": "Same claim contract as 30-prd-ownership-deny-claude, spawned as `hook codex core` — proves the guard is harness-shared, not claude-only. Step 1: backend-expert claims its own slot via an apply_patch Add File (allowed, binds); step 2: the same agent_id patches backend-expert-2's report -> deny (one slot per agent). Codex's deny envelope is the same denyResponse() shape as Claude (hookSpecificOutput.permissionDecision).",
   "env": { "FUSE_PRD": "1" },
   "setup": [
     { "path": "$TMP/.codex/apex/prd.json", "content": "{\"auth-refactor\":{\"prd\":\"prd/auth-refactor-prd.json\",\"status\":\"assigned\"}}" },
@@ -10,7 +10,22 @@
   "steps": [
     {
       "scope": "core",
-      "doc": "Codex's edit primitive is apply_patch (normalize.ts fans it into event.files); an Add File targeting another agent's report file, from a payload carrying backend-expert's agent_id+agent_type.",
+      "doc": "backend-expert claims its own slot (open) through apply_patch (normalize.ts fans it into event.files) -> allowed.",
+      "event": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "sc30b",
+        "agent_id": "agent-backend-expert-0001",
+        "agent_type": "backend-expert",
+        "tool_name": "apply_patch",
+        "tool_input": {
+          "command": "*** Begin Patch\n*** Add File: .codex/apex/prd/agents/backend-expert-prd.json\n+{\"auth-refactor\":{\"jwt-validation\":{\"status\":\"done\",\"modified\":[\"src/auth/login.ts\"],\"unchanged\":[]}}}\n*** End Patch"
+        }
+      },
+      "expect": { "exit": 0, "stdout": { "regex": "^(?![\\s\\S]*(PRD ownership|\"deny\"))" } }
+    },
+    {
+      "scope": "core",
+      "doc": "The SAME agent_id patches another slot's report file -> deny (one slot per agent).",
       "event": {
         "hook_event_name": "PreToolUse",
         "session_id": "sc30b",

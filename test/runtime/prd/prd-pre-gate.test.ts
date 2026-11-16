@@ -7,7 +7,7 @@ import { normalizeEvent } from "../../../src/runtime/normalize";
 import { handleHook } from "../../../src/runtime/handle";
 import { loadTrack } from "../../../src/tracking/store";
 import { prdAgentReportPath, prdRouterPath } from "../../../src/policy/prd";
-import { setupPrdEnv } from "./env";
+import { reopenFixtureSlot, setupPrdEnv } from "./env";
 import { bashEvent, denyReason, isDenied, writeEvent } from "./prd-pre-gate-helpers";
 
 const NOW = 1_700_000_000_000;
@@ -55,7 +55,7 @@ describe("B1 — identity resolution + first-write binding", () => {
   test("first write from a sub-agent binds its own report file; a 2nd distinct filename from the SAME agent is denied", async () => {
     const env = setupPrdEnv();
     try {
-      process.env.FUSE_PRD = "1";
+      process.env.FUSE_PRD = "1"; reopenFixtureSlot(env.root, env.homeSeg);
       const target = prdAgentReportPath(env.root, env.homeSeg, "backend-expert");
       const out1 = await prdPreGate("claude-code", {}, writeEvent(env.sessionId, target, "a1", "backend-expert"), env.root, env.trackFilePath, NOW);
       expect(out1).not.toBeNull();
@@ -76,7 +76,7 @@ describe("B1 — identity resolution + first-write binding", () => {
   test("a second agent_id trying an ALREADY-bound filename is denied", async () => {
     const env = setupPrdEnv();
     try {
-      process.env.FUSE_PRD = "1";
+      process.env.FUSE_PRD = "1"; reopenFixtureSlot(env.root, env.homeSeg);
       const target = prdAgentReportPath(env.root, env.homeSeg, "backend-expert");
       await prdPreGate("claude-code", {}, writeEvent(env.sessionId, target, "a1", "backend-expert"), env.root, env.trackFilePath, NOW);
       const out2 = await prdPreGate("claude-code", {}, writeEvent(env.sessionId, target, "a2", "backend-expert"), env.root, env.trackFilePath, NOW);
@@ -180,6 +180,7 @@ describe("B1c — Bash write-verb detection beyond redirects (cp/mv/tee/sed -i/i
       const solo = await handleHook("codex", soloPayload, { now: NOW, cwd: env.root }); // witness E: alone, must be denied (else the probe is dead)
       expect(denyReason(solo.stdout)).toContain("internal/generated enforcement state");
 
+      reopenFixtureSlot(env.root, env.homeSeg);
       const own = prdAgentReportPath(env.root, env.homeSeg, "backend-expert");
       const mixedPayload = {
         hook_event_name: "PreToolUse", session_id: env.sessionId, agent_id: "a1", agent_type: "backend-expert", tool_name: "apply_patch",
