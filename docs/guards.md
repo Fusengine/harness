@@ -72,7 +72,12 @@ Each is individually exported and overridable — pass your own array to
 Opt-in (`FUSE_PRD=1`), documented in full at [prd.md](./prd.md). It adds a
 per-file write-ownership check on top of the chain above: only the
 coordinator may write the router or a task PRD, and only the named agent
-may write its own `prd/agents/<agent>-prd.json` report.
+may write its own `<project>/<host-home>/apex/prd/agents/<agent>-prd.json` report.
+Independently of identity, a write of `<name>-prd.json` whose parent is exactly
+`<project>/prd/agents` or `<payload cwd>/prd/agents` (the misplaced-report
+shape) is denied for everyone on every host (Cursor/Kimi included), with the
+correct absolute path in the message. Deletes, other lookalike trees and other
+hosts' trees are never touched.
 
 This authorized PRD traffic is what actually needs a carve-out from
 `protectedPathGuard` above: that guard already lists `.claude/apex/`
@@ -93,7 +98,7 @@ call mixes one PRD-scoped file with any other, unrelated file,
 `applyPatchGate`'s ordinary per-file `protectedPathGate` — which
 unconditionally blocks the `.claude/apex/` file, same as if PRD were off.
 Verified live: an `apply_patch` envelope touching only the agent's own
-`prd/agents/<agent>-prd.json` report is allowed; the identical hunk for
+`<project>/<host-home>/apex/prd/agents/<agent>-prd.json` report is allowed; the identical hunk for
 that same file, bundled in ONE envelope with an unrelated `Add File:` for
 a normal source file, is denied with `[BLOCKED] Protected path` — not
 `[BLOCKED] PRD ownership` — even though the PRD file's own ownership

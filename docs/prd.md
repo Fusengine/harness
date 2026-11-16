@@ -40,7 +40,9 @@ to). One writer per file, by construction:
 **Agent names are plugin-namespaced.** A plugin agent's `agent_type` carries
 its plugin prefix, e.g. `fuse-typescript:typescript-expert`. Task-PRD keys
 and report names are that exact string, so the report path contains a colon:
-`prd/agents/fuse-typescript:typescript-expert-prd.json`. A second agent of the
+`<project>/<host-home>/apex/prd/agents/fuse-typescript:typescript-expert-prd.json`
+(always this absolute form, e.g. `<project>/.codex/apex/prd/agents/…` on Codex —
+never `<project>/prd/agents/…`, see the outside-tree deny below). A second agent of the
 same type is `fuse-typescript:typescript-expert-2`, and so on. (A built-in,
 non-plugin agent has a bare `agent_type` such as `general-purpose`, and its
 keys/files are bare too: `general-purpose-prd.json`.)
@@ -59,6 +61,7 @@ The command outputs are the real CLI formats.
    ```
    $ FUSE_PRD=1 harness prd init --id claude-code --task auth-refactor --root <project>
    prd init: created <project>/.claude/apex/prd.json with task "auth-refactor"
+   prd init: agent reports go in <project>/.claude/apex/prd/agents/<agent>-prd.json (absolute path — never <project>/prd/agents/)
    ```
 
    `--id` is the harness home (`claude-code` → `.claude`, `codex` →
@@ -96,12 +99,12 @@ The command outputs are the real CLI formats.
    ## PRD assignment — task auth-refactor
    Your files: src/auth/login.ts
    Your sub-tasks: jwt-validation
-   Report to prd/agents/fuse-typescript:typescript-expert-prd.json when done.
+   Report to <project>/.claude/apex/prd/agents/fuse-typescript:typescript-expert-prd.json when done (absolute path — never <project>/prd/agents/).
 
    ## PRD assignment — task auth-refactor
    Your files: src/auth/session.ts
    Your sub-tasks: session-store
-   Report to prd/agents/fuse-typescript:typescript-expert-2-prd.json when done.
+   Report to <project>/.claude/apex/prd/agents/fuse-typescript:typescript-expert-2-prd.json when done (absolute path — never <project>/prd/agents/).
    ```
 
    A slot is **claimed by writing its report** (`resolveClaim`,
@@ -204,6 +207,7 @@ pure information, never a block:
 |---|---|---|---|
 | Write/Edit ownership (`prd-pre-gate.ts`) | A `Write`/`Edit`/`apply_patch` targets the router, a task PRD, or `prd/agents/*.json` | claude-code / codex: enforced by identity. cursor / kimi: consultative — never blocked here | A `[BLOCKED] PRD ownership` prompt: `<path>: <reason>`, where `<reason>` is one of `"router is coordinator-only"`, `"task PRD is coordinator-only"`, `"docs is coordinator-only"`, `"agent report is not the coordinator's to write"`, `"unidentifiable agent_type — cannot verify ownership"`, or one of the claim reasons in [Claiming a slot](#claiming-a-slot-closed-slots-and-resume) |
 | Bash-under-`prd/` deny (`prd-pre-gate.ts`) | A Bash `>`/`>>` redirect targeting `apex/prd/` (`shellOutputRedirects`), **or** one of 6 non-redirect write verbs whose write-target argument resolves there (`extraBashWriteTargets`, `prd-bash-targets.ts`): `cp`/`mv`/`install` (last positional arg), `tee` (every positional arg), `sed -i`/`perl -i` (last positional arg, in-place only), `dd of=` (the `of=` operand). Verified live: `cp <src> <prd-path>` and `dd if=<src> of=<prd-path>` both deny; `touch <prd-path>` — a write verb outside this list — is **not** caught here (falls through to the ordinary gate chain, which has no `.claude/apex/` case for `touch` either, so it currently allows). Best-effort static scanner, not a shell — see the module's own header for the `getopt_long` PERMUTE-mode edge case it does not track. | Everyone, coordinator included | `"PRD files must be written via Write/Edit/apply_patch, never Bash."` |
+| Outside-tree report deny (`prd-outside-report.ts`, runs first in `prd-pre-gate.ts`) | A write target (Write/Edit/MultiEdit path, `apply_patch` Add/Update file, Bash redirect or write-verb target) named `<x>-prd.json` whose parent directory is **exactly** `<project>/prd/agents` or `<payload cwd>/prd/agents` (symlink-aware) — the shape an executor produces when it follows the relative text `prd/agents/…`. A path rule, not identity; runs even when the router is broken. Relative targets resolve against the payload `cwd`. Never touched: deletes (`*** Delete File:`, so leftovers can be cleaned up), other lookalike trees (`test/fixtures/prd/prd/agents/…`, `docs/prd/agents/…`, backups elsewhere), another host's tree (`<project>/.codex/apex/prd/agents/…`), and files without the `-prd.json` suffix. | Everyone, every host (cursor/kimi included) | `<file> is outside <agents dir> — write your PRD report to <absolute report path>` |
 | PostToolUse cross-check (`prd-post-check.ts`) | Right after the router or a task PRD is written | Silent — no immediate message | Nothing at the time; a mismatch between what a task PRD assigned and what an agent actually reported is recorded, and can later trigger the lead's `Stop` block below |
 | `SubagentStart` context (`prd-subagent-context.ts`) | A sub-agent's session starts | That sub-agent only | Its own file/sub-task slice injected as context (the `## PRD assignment` block in the example above) |
 | `SubagentStop` block-once (`prd-subagent-stop.ts`) | A sub-agent tries to stop with an undone sub-task | That sub-agent, once | `"PRD sub-task(s) not done for <agent> on task \"<task>\": <sub1, sub2, ...>. Finish the work (or ask the coordinator to reassign) before stopping."` — never fires on Cursor (identity is unlinkable there, see Known limitations) |
@@ -268,14 +272,17 @@ Per capability, not per adapter — coverage splits unevenly across targets:
 |---|---|---|---|---|---|
 | Write ownership block | full | full | consultative only (never blocks) | consultative only (never blocks) | full, if the consumer wires `PreToolUse` |
 | Bash-under-`prd/` deny | yes | yes | yes | yes | yes |
-| `SubagentStart` slice injection | yes | yes | **no** — the slice IS built (identical to claude-code's), but `adapters/cursor/respond.ts`'s `toCursorLifecycleResponse` collapses any non-denied `subagentStart` to bare `{"permission":"allow"}`, dropping it; measured byte-identical output with a matching PRD assignment, with no router at all, and with `FUSE_PRD` unset | delivered, ignored (observation-only) | gemini-cli: yes, delivered — routed through `respond()`'s native "inform" shape, then re-wrapped by `joinContextResponses` into the shared Claude-style `hookSpecificOutput.hookEventName/additionalContext` envelope plus a `[NOTE]` title line (not gemini-cli's own minimal shape, but the text arrives). hermes: yes, delivered — same Claude-style `contextResponse` as claude-code; Hermes's own documented non-blocking shape is `{context}`, not `hookSpecificOutput`, so whether a real Hermes client reads it is unverified. cline: yes, delivered in its own native `{contextModification}` shape — `joinContextResponses` keeps whichever envelope its parts came from instead of assuming the Claude one (measured 476 bytes where an earlier build emitted none; the six other targets stay byte-identical, gemini-cli 529 = 529, the Claude-family four 506 = 506) |
+| `SubagentStart` slice injection | yes | yes | **no** — the slice IS built (identical to claude-code's), but `adapters/cursor/respond.ts`'s `toCursorLifecycleResponse` collapses any non-denied `subagentStart` to bare `{"permission":"allow"}`, dropping it; measured byte-identical output with a matching PRD assignment, with no router at all, and with `FUSE_PRD` unset | delivered, ignored (observation-only) | gemini-cli: yes, delivered — routed through `respond()`'s native "inform" shape, then re-wrapped by `joinContextResponses` into the shared Claude-style `hookSpecificOutput.hookEventName/additionalContext` envelope plus a `[NOTE]` title line (not gemini-cli's own minimal shape, but the text arrives). hermes: yes, delivered — same Claude-style `contextResponse` as claude-code; Hermes's own documented non-blocking shape is `{context}`, not `hookSpecificOutput`, so whether a real Hermes client reads it is unverified. cline: yes, delivered in its own native `{contextModification}` shape — `joinContextResponses` keeps whichever envelope its parts came from instead of assuming the Claude one (measured 476 bytes where an earlier build emitted none; the other targets' envelopes are unchanged — only the report line inside the slice text now carries the absolute path, so byte counts differ with the project path and are no longer pinned here) |
 | `SubagentStop` block-once | yes | yes | delivered, response ignored | delivered, response ignored | yes — each in its OWN native block shape via `respond()`: gemini-cli `{"decision":"deny","reason"}`, cline `{"cancel":true,"errorMessage"}`, hermes `{"decision":"block","reason"}` (via `blockResponse`, which happens to match Hermes's own documented block contract). Block-once verified: 1st call blocks, an identical replay is silent (empty stdout) on all three, under both the default journal-based session track and legacy `FUSE_TRACK_JOURNAL=0` |
 | Lead `Stop` block-once | yes — wired via the second, flag-less Stop entry (`hooks.json:113-120`); the first entry (`--sound stop`) exits before stdin and never reaches it | yes (unverified against the Codex plugin repo here) | not applicable (`stop` isn't gated on Cursor today) | unverified — Kimi's plugin wiring is not in this checkout | yes — same per-adapter native shapes and block-once behavior as `SubagentStop` above (gemini-cli/cline/hermes), verified under both tracking modes |
 
 Cursor and Kimi never hard-block on file ownership: the harness cannot
 correlate a sub-agent's write back to its own identity on either target
 (see [Known limitations](#known-limitations)), so both stay consultative
-and rely on the after-the-fact cross-check instead.
+and rely on the after-the-fact cross-check instead. The one exception is
+the outside-tree report path rule (table above): it depends on the path,
+not on identity, so on Cursor and Kimi it is a hard deny, like everywhere
+else.
 
 ## CLI
 
@@ -381,7 +388,7 @@ Your `agent_type` matches more than one slot in the task PRD (e.g.
 `fuse-typescript:typescript-expert` and `fuse-typescript:typescript-expert-2`).
 The context shows every matching slice with the disambiguation header
 above so nothing is silently dropped. Nothing to fix — write the report of
-the slot you are working on: the first `prd/agents/<name>-prd.json` write
+the slot you are working on: the first `<project>/<host-home>/apex/prd/agents/<name>-prd.json` write
 from your `agent_id` claims that slot (one slot per agent), and every
 later write must target the same slot.
 
@@ -403,6 +410,16 @@ router file — either one alone returns the module to fully inert.
 
 ## Known limitations
 
+- **Outside-report rule and sub-directory sessions.** When the session `cwd`
+  is a sub-directory `X` that itself legitimately holds
+  `X/prd/agents/*-prd.json` (a monorepo package, a fixture dir), writes there
+  are denied by the outside-report rule while PRD is on, because
+  `<payload cwd>/prd/agents` is part of the denied shape.
+- **Bash `cd` is not followed.** In `cd <dir> && … > prd/agents/x-prd.json`
+  the relative target is resolved against the payload `cwd`, so the deny
+  message can name a misleading path. The Kimi and Cursor denies are verified
+  by code path and unit tests only (no real run with a native payload).
+
 - **Cursor's `SubagentStart` slice is built, then dropped.** The
   injection runs the identical code path claude-code uses (confirmed by
   running the same router/task-PRD state through both target ids), but
@@ -411,7 +428,10 @@ router file — either one alone returns the module to fully inert.
   collapses it to bare `{"permission":"allow"}`. Verified live: the
   output is byte-identical whether the router has a matching assignment,
   no router at all, or `FUSE_PRD` is unset entirely — a Cursor sub-agent
-  never sees its PRD slice.
+  never sees its PRD slice (so the absolute report path in the slice
+  cannot reach it either). The outside-tree report deny below is the only
+  protection there: a report written to `<project>/prd/agents/…` is denied
+  with the correct absolute path in the message.
   (cline had the same symptom for a different, fixable reason:
   `joinContextResponses` recognized only the Claude-shaped
   `hookSpecificOutput.additionalContext` envelope and silently dropped
