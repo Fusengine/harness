@@ -1,6 +1,7 @@
 import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
 import { shellOutputRedirects } from "./bash-write-redirects";
+import { hitsNewPath, newPathTargets } from "./protected-path-targets";
 import { LEGACY_MOTION_FRAGMENT, MOTION_KEY_FRAGMENT, MOTION_STORE_FRAGMENT } from "../motion/store";
 
 /**
@@ -99,9 +100,14 @@ function extractWriteTargets(cmd: string): string[] {
 export function protectedPathGuard(ctx: GuardContext): Prompt | null {
   if ((ctx.tool === "Write" || ctx.tool === "Edit") && ctx.filePath) {
     if (containsProtected(ctx.filePath)) return BLOCK;
+    // New paths (receipt store + HMAC key): normalised match, so `//`, `/./` and `/../` cannot hide them.
+    if (hitsNewPath(ctx.filePath)) return BLOCK;
   }
   if (ctx.tool === "Bash" && ctx.command) {
+    // Pre-existing protected paths keep EXACTLY the legacy heuristics (verdicts byte-identical to before).
     if (extractWriteTargets(ctx.command).some(containsProtected)) return BLOCK;
+    // The harness state dir and key were unprotected before: only the precise extractor applies there, so no legacy over-block is inherited.
+    if (newPathTargets(ctx.command).some(hitsNewPath)) return BLOCK;
   }
   return null;
 }
