@@ -65,7 +65,7 @@ don't assume either the old or the "everything in one place" story):
 | `harness doctor` | Print the version + resolved path of the harness *actually executing*, and compare it to npm's latest — the fast way to catch a stale global (see Pinning). |
 | `harness --version` | Print the running version (bare, on stdout) and exit. |
 | `harness codex-rules [--out <path>]` | Generate the Codex execpolicy rules file (Starlark) from the security patterns; stdout or `--out`. Plain `rm` has no prompt rule (the hook gates it with a CONFIRM code); see [docs/adapters.md](docs/adapters.md#codex-exec-policy--harness-codex-rules). |
-| `harness prd init [--task <id>] [--id <harness>] [--root <dir>]` | Requires `FUSE_PRD=1`. Create the PRD router (`<home>/apex/prd.json`) the lead cannot `Write` itself; never rewrites an existing router. |
+| `harness prd init [--task <id>] [--id <harness>] [--root <dir>]` | Requires `FUSE_PRD=1`. Create the PRD router (`<home>/apex/prd.json`) the lead cannot `Write` itself; never rewrites an existing router (a re-run prints `prd init: exists <path>` and the agents-dir line, exit 0). |
 | `harness prd status [--json]` | Read-only, works without `FUSE_PRD=1`. Print each task's router status and sub-task progress. |
 | `harness prd validate <task> [agent]` | Requires `FUSE_PRD=1`. Cross-check a task PRD against agent reports and promote matching sub-tasks/router entries to `validated`. |
 | `harness prd compact <task>` | Requires `FUSE_PRD=1`. Collapse a fully-validated task PRD to its compacted shape. |
