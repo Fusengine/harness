@@ -6,7 +6,7 @@
 import { writeTaskFile } from "../../policy/prd/prd-io";
 import { compactTaskFile } from "../../policy/prd/prd-compact";
 import { isCompacted, subTasksOf } from "../../policy/prd/prd-schema";
-import { requireFusePrd, resolveTaskFile, withPrdLock } from "./shared";
+import { requireTaskFile, withPrdLock } from "./shared";
 
 /**
  * Run `harness prd compact`. Exit 0 on success (including a no-op compact),
@@ -14,19 +14,12 @@ import { requireFusePrd, resolveTaskFile, withPrdLock } from "./shared";
  * held, exit 2 on usage/lookup errors.
  */
 export async function runPrdCompact(argv: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<number> {
-  const resolved = requireFusePrd(argv, cwd, env, "compact");
-  if (!resolved.ok) {
-    process.stderr.write(resolved.message + "\n");
-    return resolved.code;
-  }
-  const { root, homeSeg } = resolved;
-
-  const tf = await resolveTaskFile(argv, root, homeSeg, "usage: harness prd compact <task>");
+  const tf = await requireTaskFile(argv, cwd, env, "compact", "usage: harness prd compact <task>");
   if (!tf.ok) {
     process.stderr.write(tf.message + "\n");
     return tf.code;
   }
-  const { routerEntry, taskFile } = tf;
+  const { root, homeSeg, routerEntry, taskFile } = tf;
 
   for (const [agent, entry] of Object.entries(taskFile)) {
     if (isCompacted(entry)) continue;

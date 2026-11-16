@@ -8,7 +8,7 @@ import { readAgentReport, writeRouter, writeTaskFile } from "../../policy/prd/pr
 import { incompleteSubTasks } from "../../policy/prd/prd-crosscheck";
 import { isCompacted, subTasksOf, withRouterStatus, withSubTaskValidated } from "../../policy/prd/prd-schema";
 import type { PrdAgentReportFile, PrdCrossCheckViolation, PrdTaskFile } from "../../policy/prd/interfaces/types";
-import { requireFusePrd, resolveTaskFile, withPrdLock } from "./shared";
+import { requireTaskFile, withPrdLock } from "./shared";
 
 function allValidated(taskFile: PrdTaskFile): boolean {
   return Object.values(taskFile).every(
@@ -42,19 +42,12 @@ function findUnreadySubTasks(
  * violations or a missing `FUSE_PRD=1`/held lock, exit 2 on usage/lookup errors.
  */
 export async function runPrdValidate(argv: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<number> {
-  const resolved = requireFusePrd(argv, cwd, env, "validate");
-  if (!resolved.ok) {
-    process.stderr.write(resolved.message + "\n");
-    return resolved.code;
-  }
-  const { root, homeSeg } = resolved;
-
-  const tf = await resolveTaskFile(argv, root, homeSeg, "usage: harness prd validate <task> [agent]");
+  const tf = await requireTaskFile(argv, cwd, env, "validate", "usage: harness prd validate <task> [agent]");
   if (!tf.ok) {
     process.stderr.write(tf.message + "\n");
     return tf.code;
   }
-  const { task, agentArg, router, routerEntry, taskFile } = tf;
+  const { root, homeSeg, task, agentArg, router, routerEntry, taskFile } = tf;
   if (agentArg && !(agentArg in taskFile)) {
     process.stderr.write(`no such agent "${agentArg}" in task PRD for "${task}"\n`);
     return 2;
