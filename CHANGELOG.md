@@ -4,6 +4,21 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.122] - 2026-11-16
+
+### Fixed
+
+- **prd: sub-agents receive the absolute PRD report path** — the SubagentStart PRD slice now ends with `Report to <project>/<host-home>/apex/prd/agents/<agent>-prd.json when done (absolute path - never <project>/prd/agents/)`, on every host with context injection (Cursor has none). `harness prd init` also prints the absolute agents directory. Tests: `prd-context-abs`, `prd-subagent-context-abs`, `prd-subagent-context`.
+- **prd: deny PRD reports written to `<project>/prd/agents`** — while PRD is on, a `*-prd.json` written directly in `<project>/prd/agents` or `<cwd>/prd/agents` is refused with the correct absolute path (Write/Edit/MultiEdit, `apply_patch` add/update/move, Bash redirects and write verbs); deletes and other trees (e.g. `docs/prd/agents/`) are untouched, and nothing changes when PRD is off. Tests: `prd-outside-report`.
+
+### Documentation
+
+- **docs/prd.md, docs/guards.md** — absolute report paths and the outside-report rule; real-condition run report `docs/reports/2026-11-16-prd-report-path-real-run.md` (Codex + Claude).
+
+### Known limitations
+
+- A sub-directory cwd that itself holds `prd/agents/*-prd.json` is not covered beyond `<cwd>/prd/agents`; a Bash `cd` before the write is not followed; Kimi and Cursor are verified by unit tests only.
+
 ## [0.1.121] - 2026-11-16
 
 ### Added
