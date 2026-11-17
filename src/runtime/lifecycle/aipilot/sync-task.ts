@@ -10,7 +10,7 @@ import { readJsonFile } from "../../../util/json-io";
 import { spawnCapture } from "../../../util/runtime-io";
 import { contextResponse } from "../../../adapters/claude";
 import { acquireLock, taskCreate, taskStart, taskComplete } from "./apex-task-store";
-import { harnessHomeSegment } from "../../../policy/apex-target";
+import { harnessHomeSegment, hostAgentRef } from "../../../policy/apex-target";
 import type { ApexTaskFile } from "./types";
 
 /** True when the project has uncommitted git changes. */
@@ -21,14 +21,14 @@ async function hasGitChanges(cwd: string): Promise<boolean> {
 }
 
 /** Handle a completed task: emit the commit reminder (or the no-change note). */
-async function onComplete(taskFile: string, taskId: string, projectRoot: string): Promise<string> {
+async function onComplete(taskFile: string, taskId: string, projectRoot: string, id: string): Promise<string> {
   await taskComplete(taskFile, taskId);
   if (!(await hasGitChanges(projectRoot))) {
     return contextResponse("PostToolUse", "Task completed. No changes to commit.");
   }
   const data = await readJsonFile<ApexTaskFile>(taskFile);
   const subject = data?.tasks[taskId]?.subject ?? "Task";
-  return contextResponse("PostToolUse", `Task #${taskId} completed: ${subject}\n\nChanges detected. Reminder: make a WIP commit via agent fuse-ai-pilot:commit (commit only — no push, merge or tag).`);
+  return contextResponse("PostToolUse", `Task #${taskId} completed: ${subject}\n\nChanges detected. Reminder: make a WIP commit via agent ${hostAgentRef(id, "commit")} (commit only — no push, merge or tag).`);
 }
 
 /**
@@ -67,7 +67,7 @@ export async function syncTaskTracking(payload: Record<string, unknown>, cwd: st
       const blocked = (ti.addBlockedBy as unknown as string[] | undefined)?.join(",") ?? "";
       await taskStart(taskFile, taskId, ti.subject || undefined, ti.description || undefined, blocked || undefined);
     }
-    if (newStatus === "completed") return onComplete(taskFile, taskId, projectRoot);
+    if (newStatus === "completed") return onComplete(taskFile, taskId, projectRoot, id);
     return "";
   } finally {
     await unlock();

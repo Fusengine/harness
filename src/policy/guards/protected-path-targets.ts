@@ -52,10 +52,17 @@ function spellPaths(text: string): string {
   return plain.replace(/\\ /g, GLUED_SPACE).replace(PATH_ESCAPE_RE, "$1");
 }
 
+/** `trash` / `trash-put` (optionally behind sudo/env-style wrappers): every operand is moved to the Trash, i.e. taken away from where it was. */
+const TRASH_RE = /^(?:(?:sudo|command|nohup|env|time|\w+=\S*)\s+)*(?:\S*\/)?trash(?:-put)?\s/;
+
 /** Collect the write targets of every simple command in `text` (substitutions already replaced by a placeholder word). */
 function segments(text: string, push: Push): void {
   // `\;` ends a `find -exec` clause but is NOT a command separator: keep it as a `\` word so later clauses stay in the same `find` command.
-  for (const seg of text.replace(/\\;/g, " \\ ").replace(FLATTEN_RE, ";").split(/[;&|\n]+/)) commandTargets(seg.replace(REDIRECT_RE, " ").trim().split(/\s+/), push);
+  for (const seg of text.replace(/\\;/g, " \\ ").replace(FLATTEN_RE, ";").split(/[;&|\n]+/)) {
+    const words = seg.replace(REDIRECT_RE, " ").trim().split(/\s+/);
+    commandTargets(words, push);
+    if (TRASH_RE.test(`${words.join(" ")} `)) words.filter((w) => !w.startsWith("-")).forEach(push); // wrapper/verb names never match a protected path
+  }
 }
 
 /**
@@ -93,14 +100,14 @@ export function newPathTargets(cmd: string): string[] {
   return out;
 }
 
-/** Paths under the harness home that an agent must never write: the signed track dir and the HMAC key. */
-const NEW_PATH_RES: readonly RegExp[] = [/(?:^|\/)\.fuse-harness\/state(?:\/|$)/i, /(?:^|\/)\.fuse-harness\/\.key\/?$/i];
+/** Paths under the harness home that an agent must never write: the signed track dir, the HMAC key, and the harness dir itself (moving or deleting it takes both away). */
+const NEW_PATH_RES: readonly RegExp[] = [/(?:^|\/)\.fuse-harness\/state(?:\/|$)/i, /(?:^|\/)\.fuse-harness\/\.key\/?$/i, /(?:^|\/)\.fuse-harness\/?$/i];
 
 /**
  * Whether `target` is (or resolves to) the harness state dir or HMAC key. The path is normalised first, so `//`, `/./`
  * and `/x/../` segments cannot hide it; matching is case-insensitive (macOS filesystems are).
  * @param target - A file path from a Write/Edit payload or an extracted Bash write target.
- * @returns `true` when the target is the state dir (or inside it) or the key file.
+ * @returns `true` when the target is the harness dir itself, the state dir (or inside it) or the key file.
  */
 export function hitsNewPath(target: string): boolean {
   const n = posix.normalize(target.trim().replaceAll(GLUED_SPACE, " "));

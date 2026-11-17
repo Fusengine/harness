@@ -2,6 +2,7 @@ import type { Prompt } from "../../prompt/types";
 import { type DesignMode, type DesignState, quotaFor } from "./state";
 import { corpusReady } from "./corpus";
 import { PLUGINS_DIR } from "../file-size";
+import { designSkillsRoot } from "../host-skill-paths";
 import { deny } from "./gates";
 import { isTemplateUrl } from "./template-urls";
 
@@ -108,13 +109,17 @@ export function geminiCreateGate(state: DesignState): Prompt | null {
  * denylist cannot cover (sector-browse quality) belongs to the doc, per the
  * rule "the gate requires what is verifiable, the doc prescribes zeal".
  */
-export function browserNavigateGate(state: DesignState, url: string): Prompt | null {
+export function browserNavigateGate(state: DesignState, url: string, hostId?: string): Prompt | null {
+  // A non-Claude host is pointed at its OWN installed design skills (else neutral wording); reads are credited by file name, so any copy clears the gate.
+  const root = designSkillsRoot(hostId, SKILLS);
+  const designSystem = root ? `${root}/design-system/SKILL.md` : "the design-system skill (design-expert)";
+  const inspiration = root ? `${root}/design-web/references/design-inspiration.md` : "design-inspiration.md (design-web skill)";
   if (state.currentPhase < 1) {
-    return deny(`BLOCKED: Phase 0 not done. READ: ${SKILLS}/design-system/SKILL.md first.`);
+    return deny(`BLOCKED: Phase 0 not done. READ: ${designSystem} first.`);
   }
   if (!state.inspirationRead) {
     return deny(
-      `BLOCKED: Read the inspiration doctrine first. READ: ${SKILLS}/design-web/references/design-inspiration.md, then the refs-design corpus (README.md + relevant tokens-*.md) with the Read tool`,
+      `BLOCKED: Read the inspiration doctrine first. READ: ${inspiration}, then the refs-design corpus (README.md + relevant tokens-*.md) with the Read tool`,
     );
   }
   if (state.currentPhase === 1 && url && isTemplateUrl(url)) {

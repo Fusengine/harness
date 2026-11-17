@@ -3,7 +3,7 @@ import { resolveProjectDir } from "../../util/project-dir";
 import { lastCodeEditAt } from "../lifecycle/code-edit-time";
 import type { NormalizedEvent } from "../normalize";
 import type { HandleOptions } from "../handle";
-import { releaseGatePrompt } from "./gate";
+import { releaseGatePrompt, reviewActionLine } from "./gate";
 
 /**
  * PreToolUse adapter: the release-gate prompt for this event, or `null`.
@@ -16,7 +16,7 @@ import { releaseGatePrompt } from "./gate";
  * @param opts - Handle options (cwd, clock, test home).
  * @param gate - Gate implementation (tests inject a crashing one).
  */
-export function releasePrompt(event: NormalizedEvent, opts: HandleOptions, gate: typeof releaseGatePrompt = releaseGatePrompt): Prompt | null {
+export function releasePrompt(event: NormalizedEvent, opts: HandleOptions, gate: typeof releaseGatePrompt = releaseGatePrompt, id: string = "claude-code"): Prompt | null {
   if (!event.command) return null;
   try {
     return gate(event.command, {
@@ -24,6 +24,7 @@ export function releasePrompt(event: NormalizedEvent, opts: HandleOptions, gate:
       lastEdit: lastCodeEditAt(event.sessionId, opts.home),
       now: opts.now ?? Date.now(),
       home: opts.home,
+      id,
     });
   } catch {
     return RELEASE_LIKE.test(event.command)
@@ -32,7 +33,7 @@ export function releasePrompt(event: NormalizedEvent, opts: HandleOptions, gate:
           ruleId: "release-gate",
           title: "Release gate unavailable",
           reason: "The release gate crashed while checking this command, which looks like a release step (gh pr merge / git tag). Failing closed.",
-          actions: ["Run fuse-ai-pilot:sniper then fuse-ai-pilot:challenger, then retry", "Or approve explicitly if this release is intended"],
+          actions: [reviewActionLine(id), "Or approve explicitly if this release is intended"],
         }
       : null;
   }

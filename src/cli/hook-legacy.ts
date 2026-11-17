@@ -29,7 +29,7 @@ export async function runLegacyHook(argv: string[]): Promise<never> {
   // refs are only consumed on the PreToolUse path: resolved on first read, memoized
   let refsMemo: { value: string | undefined } | undefined;
   const lazyRefsDir = (): string | undefined => {
-    refsMemo ??= { value: process.env.FUSE_HARNESS_REFS || discoverRefs(homedir(), process.cwd(), marketplaces) || undefined };
+    refsMemo ??= { value: process.env.FUSE_HARNESS_REFS || discoverRefs(homedir(), process.cwd(), marketplaces, id) || undefined };
     return refsMemo.value;
   };
   traceHook("args", { id, scope });

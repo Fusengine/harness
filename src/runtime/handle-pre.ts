@@ -62,7 +62,7 @@ export async function handlePre(ctx: PreContext): Promise<HandleOutcome> {
     if (scopeBlock) return { stdout: withDenyNotice(id, respond(id, scopeBlock, event.eventName ?? "PreToolUse"), scopeBlock, event.sessionId, dirname(file), opts.now), exit: 0 };
   }
 
-  const designBlock = designGate(payload, event, designCacheDir, opts.cwd, opts.corpusRoot);
+  const designBlock = designGate(payload, event, designCacheDir, opts.cwd, opts.corpusRoot, undefined, id);
   if (designBlock) return { stdout: withDenyNotice(id, respond(id, designBlock, event.eventName ?? "PreToolUse"), designBlock, event.sessionId, dirname(file), opts.now), exit: 0 };
 
   if (id === "cursor" && (event.eventName === "beforeReadFile" || event.eventName === "beforeTabFileRead")) {
@@ -119,6 +119,7 @@ export async function handlePre(ctx: PreContext): Promise<HandleOutcome> {
   }
 
   const gateInput = {
+    hostId: id,
     sessionId: event.sessionId,
     framework,
     tool: event.tool,
@@ -148,7 +149,7 @@ export async function handlePre(ctx: PreContext): Promise<HandleOutcome> {
       ? await gateCommandCandidates(gateInput, event.commandCandidates!)
       : await gate(gateInput);
   // An advisory `inform` never stands in for the release gate: a release step is judged first.
-  const finalGate = (prompt && prompt.kind !== "inform" ? prompt : null) ?? releasePrompt(event, opts) ?? prompt ?? patchNote;
+  const finalGate = (prompt && prompt.kind !== "inform" ? prompt : null) ?? releasePrompt(event, opts, undefined, id) ?? prompt ?? patchNote;
   if (finalGate) {
     // CONFIRM <code> flow: ONLY changes anything when Codex/Kimi/Cursor are
     // about to downgrade THIS `ask` to a hard deny (confirmGate returns null

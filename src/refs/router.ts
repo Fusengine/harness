@@ -25,6 +25,22 @@ export function scoreReferences(refs: RefMeta[], filePath: string, content: stri
   return scored;
 }
 
+/** Detected framework -> its own `solid-*` skill dir when the name is not `solid-<framework>`. */
+const OWN_SKILL_ALIAS: Record<string, string> = { laravel: "solid-php" };
+/** Detected "frameworks" with no dedicated solid skill (never prefer one). */
+const NO_OWN_SKILL = new Set(["", "generic", "tailwind"]);
+
+/**
+ * The detected framework's own SOLID skill dir name (`solid-tanstack-start`,
+ * `solid-nextjs`, `solid-php` for laravel, ...), or `undefined` for a framework
+ * without one (generic, tailwind). Whether it is INSTALLED is decided by the refs.
+ * @param framework - Detected framework (`detectFramework()` domain).
+ */
+export function frameworkSkill(framework: string): string | undefined {
+  if (NO_OWN_SKILL.has(framework)) return undefined;
+  return OWN_SKILL_ALIAS[framework] ?? `solid-${framework}`;
+}
+
 /**
  * Route references for a file edit: top-2 required + next-2 optional, ensuring a
  * `principle` and a `template` appear in the top 4. Returns null when nothing scores.
@@ -34,8 +50,18 @@ export function routeReferences(
   filePath: string,
   content: string,
   skillPath = "",
+  framework = "",
 ): RouteResult | null {
-  const scored = scoreReferences(refs, filePath, content);
+  let scored = scoreReferences(refs, filePath, content);
+  // Framework-aware: when the detected framework has its OWN solid skill and one of
+  // its refs scores for this edit, only that skill's refs are routed (a generic
+  // `**/*.tsx` glob of another skill must not outrank it). No own ref scored → the
+  // flat cross-skill scoring below is unchanged.
+  const own = frameworkSkill(framework);
+  if (own) {
+    const ownScored = scored.filter((s) => s.meta.filePath.includes(`/skills/${own}/`));
+    if (ownScored.length) scored = ownScored;
+  }
   if (!scored.length) return null;
   scored.sort((a, b) => b.score - a.score);
   const hoist = (level: string): void => {

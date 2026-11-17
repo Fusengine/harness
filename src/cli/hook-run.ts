@@ -45,7 +45,7 @@ export async function runHookOnce(input: HookRunInput): Promise<HookRunOutput> {
   const marketplaces = (process.env.FUSE_HARNESS_MARKETPLACES ?? "fusengine-plugins").split(",").map((s) => s.trim()).filter(Boolean);
   let refsMemo: { value: string | undefined } | undefined;
   const lazyRefsDir = (): string | undefined => {
-    refsMemo ??= { value: process.env.FUSE_HARNESS_REFS || discoverRefs(homedir(), process.cwd(), marketplaces) || undefined };
+    refsMemo ??= { value: process.env.FUSE_HARNESS_REFS || discoverRefs(homedir(), process.cwd(), marketplaces, id) || undefined };
     return refsMemo.value;
   };
   let outcome: Awaited<ReturnType<typeof handleHook>>;

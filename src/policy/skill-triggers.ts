@@ -7,7 +7,7 @@
 import type { Prompt } from "../prompt/types";
 import { CASE_SENSITIVE_FRAMEWORKS, SKILL_TRIGGERS } from "./skill-trigger-patterns";
 import { isShadcnProject } from "./shadcn-project";
-import { resolveSkillPath } from "./skill-path";
+import { skillReadTarget } from "./host-skill-paths";
 import { isReleaseMetadataPath } from "./release-metadata-path";
 
 export { SKILL_TRIGGERS } from "./skill-trigger-patterns";
@@ -67,6 +67,8 @@ export function usesTailwindUtilities(filePath: string, content: string): boolea
  *   with Tailwind utility classes in `className`, the "tailwind" domain
  *   skills are merged in alongside `framework`'s own (ports the separate
  *   `check-tailwind-skill.py` gate, independent of react/nextjs).
+ * @param hostId - Running host id: the printed skill paths are that host's own
+ *   install (else a real discovered path, else neutral wording); absent = Claude Code, unchanged.
  * @returns a `block` Prompt naming the missing sub-skills, or `null` when satisfied.
  */
 export function skillTriggerGate(
@@ -76,6 +78,7 @@ export function skillTriggerGate(
   forcedSkill?: string | null,
   cwd?: string,
   filePath?: string,
+  hostId?: string,
 ): Prompt | null {
   // Release metadata (plugin/marketplace manifest, changelog) carries no framework API: no skill applies.
   if (filePath && isReleaseMetadataPath(filePath)) return null;
@@ -87,7 +90,7 @@ export function skillTriggerGate(
       title: "FuseCore skill not consulted",
       reason:
         "BLOCKED: FuseCore project detected. Read the FuseCore skill before writing code in FuseCore modules.",
-      actions: [`Read ${resolveSkillPath("fusecore")}`],
+      actions: [`Read ${skillReadTarget("fusecore", hostId)}`],
     };
   }
   let required = detectRequiredSkills(framework, content);
@@ -106,6 +109,6 @@ export function skillTriggerGate(
     reason:
       `${framework}: code uses APIs covered by ${missing.join(", ")} ` +
       "but its skill reference was not read this session.",
-    actions: missing.map((s) => `Read ${resolveSkillPath(s)}`),
+    actions: missing.map((s) => `Read ${skillReadTarget(s, hostId)}`),
   };
 }

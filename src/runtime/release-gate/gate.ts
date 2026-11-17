@@ -1,6 +1,16 @@
 import type { Prompt } from "../../prompt/types";
 import { releaseAction } from "../../policy/release-command";
+import { hostAgentRef } from "../../policy/apex-target";
 import { readReviewReports } from "./store";
+
+/**
+ * The "run the review agents, then retry" action line, naming the agents the way
+ * the running host does (Claude Code: `fuse-ai-pilot:sniper`; others: `sniper`).
+ * @param id - Harness id (default Claude Code: text unchanged).
+ */
+export function reviewActionLine(id: string = "claude-code"): string {
+  return `Run ${hostAgentRef(id, "sniper")} then ${hostAgentRef(id, "challenger")}, then retry`;
+}
 
 /** Inputs of the release gate (all injected: pure and testable). */
 export interface ReleaseGateContext {
@@ -9,6 +19,8 @@ export interface ReleaseGateContext {
   lastEdit: number;
   now: number;
   home?: string;
+  /** Running host id (names the review agents in the action line); default Claude Code. */
+  id?: string;
 }
 
 /**
@@ -34,6 +46,6 @@ export function releaseGatePrompt(command: string, ctx: ReleaseGateContext): Pro
     ruleId: "release-gate",
     title: "Release gate",
     reason: `${what} needs a fresh ${missing.join(" + ")} report (newer than the last code edit).`,
-    actions: ["Run fuse-ai-pilot:sniper then fuse-ai-pilot:challenger, then retry", "Or approve explicitly if this release is intended"],
+    actions: [reviewActionLine(ctx.id), "Or approve explicitly if this release is intended"],
   };
 }

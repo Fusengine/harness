@@ -13,6 +13,7 @@
  */
 import { hashText } from "../util/json-io";
 import type { Prompt } from "../prompt/types";
+import { hostAgentRef } from "./apex-target";
 
 /** One recorded deny: identical-in-window count, and when the last landed. */
 export interface DenyEntry { count: number; lastTs: number; }
@@ -71,14 +72,15 @@ export function denyLoopCheck(hash: string, priorDenies: Record<string, DenyEntr
  * message changes, so every harness renders it through the same adapter.
  * @param prompt - The original block prompt.
  * @param count - The running identical-deny count (n).
+ * @param hostId - Running host id: names the research agent as that host does (default Claude Code, text unchanged).
  * @returns A block prompt with `[REPEAT]` title, STOP-prefixed reason, forced research action.
  */
-export function enrichRepeatDeny(prompt: Prompt, count: number): Prompt {
+export function enrichRepeatDeny(prompt: Prompt, count: number, hostId: string = "claude-code"): Prompt {
   // H2b: the counter cannot know whether new reads/actions happened since the
   // last deny, so the hard STOP is reserved for the UNCHANGED retry — a retry
   // after completing the required reads/actions is legitimate and expected.
   const stop = `Identical attempt #${count} already denied for the same reason. Do not retry this same call UNCHANGED — if you have since completed the required reads/actions, retry now; otherwise STOP and pick a DIFFERENT approach. `;
-  const action = "Launch fuse-ai-pilot:research-expert to find a DIFFERENT approach";
+  const action = `Launch ${hostAgentRef(hostId, "research-expert")} to find a DIFFERENT approach`;
   return {
     ...prompt,
     title: prompt.title.startsWith("[REPEAT]") ? prompt.title : `[REPEAT] ${prompt.title}`,

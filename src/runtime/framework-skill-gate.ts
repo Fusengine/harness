@@ -75,5 +75,5 @@ export function frameworkSkillGate(
   // skill check, not frameworkSolidGate (whose PHP exclude is vendor-only).
   if (skillGateExcluded(input.framework, input.filePath)) return null;
   const forced = input.cwd ? requiredArchSkill(input.cwd) : null;
-  return skillTriggerGate(input.framework, content, refsRead, forced, input.cwd, input.filePath);
+  return skillTriggerGate(input.framework, content, refsRead, forced, input.cwd, input.filePath, input.hostId);
 }

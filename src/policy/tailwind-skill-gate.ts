@@ -11,7 +11,7 @@
  */
 import type { Prompt } from "../prompt/types";
 import { usesTailwindUtilities } from "./skill-triggers";
-import { resolveSkillPath } from "./skill-path";
+import { skillReadTarget } from "./host-skill-paths";
 
 /** Vendored/build paths exempt (parity check-tailwind-skill.py `/(node_modules|dist|build)/`). */
 const TW_EXCLUDE_RE = /(^|\/)(node_modules|dist|build)\//;
@@ -44,12 +44,14 @@ export function tailwindBaseSkillRead(refsRead: readonly string[]): boolean {
  * @param filePath - the file being written.
  * @param content - the written content.
  * @param refsRead - in-session read reference paths.
+ * @param hostId - Running host id (printed skill paths are that host's own; absent = Claude Code, unchanged).
  */
 export function tailwindSkillGate(
   tool: string,
   filePath: string,
   content: string,
   refsRead: readonly string[],
+  hostId?: string,
 ): Prompt | null {
   if (!isTailwindWrite(tool, filePath, content)) return null;
   if (tailwindBaseSkillRead(refsRead)) return null;
@@ -58,6 +60,6 @@ export function tailwindSkillGate(
     title: "Tailwind CSS skill",
     reason:
       "BLOCKED: Tailwind skill not consulted. Read tailwindcss-v4/SKILL.md or tailwindcss-utilities/SKILL.md, or use mcp__context7__query-docs (topic: tailwindcss), then retry.",
-    actions: [`Read ${resolveSkillPath("tailwindcss-v4")} or ${resolveSkillPath("tailwindcss-utilities")}`],
+    actions: [`Read ${skillReadTarget("tailwindcss-v4", hostId)} or ${skillReadTarget("tailwindcss-utilities", hostId)}`],
   };
 }

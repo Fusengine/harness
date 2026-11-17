@@ -3,6 +3,8 @@ import type { RefMeta } from "../refs/types";
 
 /** A tool-use to gate, plus the session pointers needed for the stateful gates. */
 export interface GateInput {
+  /** Running host id (handle-pre.ts): keeps non-Claude hosts away from `~/.claude` skill paths in APEX messages; absent = Claude Code. */
+  hostId?: string;
   sessionId: string;
   framework: string;
   tool: string;

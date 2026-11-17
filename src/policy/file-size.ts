@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import { resolveMaxLines, splitTarget } from "../config/limits";
+import { isNonClaudeHost, solidSkillDir } from "./host-skill-paths";
 
 /**
  * Fixed marketplace plugins root — parity with Python `enforce-file-size.py`'s
@@ -82,6 +83,7 @@ export function countFrameworkCodeLines(content: string): number {
  *   `"codex"` swaps the Claude-specific remediation (`~/.claude` plugin path,
  *   `Write` tool) for an `apply_patch`-compatible one; every other value (incl.
  *   the default `""`) renders the ORIGINAL Claude message, byte-for-byte.
+ * @param hostId - Running host id: a non-Claude host never gets the phantom `~/.claude` path (its own skill dir if it exists, else a real discovered one, else neutral wording). Claude / empty: unchanged.
  * @param patchPath - Codex only: project-relative path recopied verbatim into
  *   the `*** Update File:` remediation (a bare basename would name a file that
  *   does not exist at the project root). Falls back to the basename.
@@ -94,13 +96,16 @@ export function evaluateFileSize(
   displayLines: number = lines,
   target = "",
   patchPath = "",
+  hostId = "",
 ): FileSizeVerdict {
   if (lines <= max) return { ok: true, lines, max, message: null };
   const split = splitTarget(max);
   const fname = filePath ? basename(filePath) : "file";
   const ref = SOLID_REF[framework] ?? "generic/";
+  // A non-Claude host is pointed at a SOLID skill dir that exists (its own, else the real discovered one); none → neutral wording. Claude: the historical string.
+  const solidDir = isNonClaudeHost(hostId) ? solidSkillDir(ref, hostId) ?? "the SOLID skill in your own skills directory" : `${PLUGINS_DIR}/${ref}`;
   const message = target === "codex"
     ? `BLOCKED: '${fname}' has ${displayLines} lines (max: ${max}). TO SPLIT: 1) Create new module files (<${split} lines each) 2) Use apply_patch (*** Update File: ${patchPath || fname}) to shrink it to <${max} lines.`
-    : `BLOCKED: '${fname}' has ${displayLines} lines (max: ${max}). TO SPLIT: 1) Read SOLID rules: ${PLUGINS_DIR}/${ref} 2) Create new module files (<${split} lines each) 3) Use Write to replace '${fname}' with <${max} lines version.`;
+    : `BLOCKED: '${fname}' has ${displayLines} lines (max: ${max}). TO SPLIT: 1) Read SOLID rules: ${solidDir} 2) Create new module files (<${split} lines each) 3) Use Write to replace '${fname}' with <${max} lines version.`;
   return { ok: false, lines, max, message };
 }

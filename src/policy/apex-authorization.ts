@@ -2,6 +2,7 @@ import { resolveSessions, type AuthEntry } from "../freshness/doc-helpers";
 import { routeReferences } from "../refs/router";
 import { DEFAULT_TTL_SEC, ttlLabel } from "../config/ttl";
 import { CONTEXT7_SOURCE, getSkillSource } from "./skill-source";
+import { hostRoutedPaths } from "./host-skill-paths";
 import type { ApexContext, ApexGate } from "./apex";
 
 /** Pending doc-credit target written on a Check-1 deny (parity enforce-apex-phases.ts:80 `state.target`). */
@@ -75,12 +76,12 @@ export const apexAuthorizationGate: ApexGate = (ctx) => {
   if (skillReadAuthorized(ctx, now, windowMs)) return null;
   const ttl = ttlLabel(Math.round(windowMs / 1000));
   const title = `APEX: ${ctx.framework} documentation required`;
-  const routed = ctx.refs?.length ? routeReferences(ctx.refs, ctx.filePath, ctx.content) : null;
+  const routed = ctx.refs?.length ? routeReferences(ctx.refs, ctx.filePath, ctx.content, "", ctx.framework) : null;
   if (!routed) {
     // Parity enforce-apex-phases.ts:82-87: getSkillSource (skill-source.ts)
     // resolves the REAL installed SKILL.md, or yields the context7 consigne —
     // never SOLID_REF's phantom `${PLUGINS_DIR}/generic/SKILL.md`.
-    const src = getSkillSource(ctx.framework);
+    const src = getSkillSource(ctx.framework, undefined, ctx.hostId);
     return {
       kind: "block",
       title,
@@ -88,13 +89,13 @@ export const apexAuthorizationGate: ApexGate = (ctx) => {
       actions: [src === CONTEXT7_SOURCE ? `Query ${CONTEXT7_SOURCE} for ${ctx.framework} docs` : `Read ${src}`],
     };
   }
-  const optional = routed.optional.map((r) => r.meta.filePath);
+  const hostPaths = hostRoutedPaths(routed, ctx, routed.required.map((r) => r.meta.filePath));
   const reason = [
     // H2b: name the full set (required + Optional) and invite the retry.
     `APEX: Read ALL SOLID references below (including Optional), then retry (expires every ${ttl}) for ${ctx.framework}.`,
     `Editing: ${ctx.filePath}`,
-    ...(optional.length ? [`Optional: ${optional.join(", ")}`] : []),
-    `Full skill: ${routed.skillPath}`,
+    ...(hostPaths.optional.length ? [`Optional: ${hostPaths.optional.join(", ")}`] : []),
+    ...(hostPaths.skillPath === null ? [] : [`Full skill: ${hostPaths.skillPath}`]),
   ].join("\n");
-  return { kind: "block", title, reason, actions: routed.required.map((r) => r.meta.filePath) };
+  return { kind: "block", title, reason, actions: hostPaths.actions };
 };

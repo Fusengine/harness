@@ -53,6 +53,9 @@ export interface PolicyContext {
    * caller — the Claude/Cursor deny message stays byte-for-byte unchanged.
    */
   target?: string;
+
+  /** Running host id (gate.ts): a non-Claude host never gets the phantom `~/.claude` skill path in the file-size deny. Absent = Claude Code (message unchanged). */
+  hostId?: string;
 }
 
 /** Harness-agnostic policy decision (+ a portable prompt for adapters to render). */

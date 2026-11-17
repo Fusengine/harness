@@ -1,7 +1,7 @@
 import { evaluateApex, PRE_AUTH_GATES, POST_AUTH_GATES, type ApexContext } from "../policy/apex";
 import { apexAuthorizationGate } from "../policy/apex-authorization";
 import { listAllMissing } from "../policy/apex-missing";
-import { isTrivialEdit, protectedPathGate, SKIP_DIRS } from "../policy/trivial-edits";
+import { isSkippedPath, isTrivialEdit, protectedPathGate } from "../policy/trivial-edits";
 import { FAIL_CLOSED } from "../policy/guards";
 import { agentsFresh, recordTarget, recordTrivialEdit, trivialCount, type SessionTrack } from "../tracking/session-state";
 import { agentsRanFromTranscript } from "../freshness/agent-evidence";
@@ -74,7 +74,7 @@ export async function apexScopedGate(input: GateInput, track: SessionTrack, wind
   const protectedDeny = protectedPathGate(input.tool, input.filePath);
   if (protectedDeny) return protectedDeny;
   // (2) CODE_EXT runs upstream (gate.ts isApexScoped); dependency/build dirs skip (parity :53-54).
-  if (SKIP_DIRS.test(input.filePath ?? "")) return null;
+  if (isSkippedPath(input.filePath, input.cwd)) return null;
 
   // (3) Trivial-edit fast path: a few tiny, non-replace Edits skip the APEX gates
   // (parity :58-65 — only Edit ever qualifies as "trivial"; a Write always
@@ -92,6 +92,7 @@ export async function apexScopedGate(input: GateInput, track: SessionTrack, wind
     (input.transcriptPath ? agentsRanFromTranscript(input.transcriptPath, names, windowMs, input.now, dirname(input.trackFile)) : agentsFresh(track, names, windowMs, input.now));
 
   const ctx: ApexContext = {
+    hostId: input.hostId,
     sessionId: input.sessionId,
     framework: input.framework,
     filePath: input.filePath ?? "",

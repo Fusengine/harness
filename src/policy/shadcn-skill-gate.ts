@@ -73,6 +73,7 @@ export function shadcnMcpConsulted(authorizations: Record<string, AuthEntry> | u
  * (Context7 AND Exa, or a web fallback alone — not the Python's strict AND).
  * Returns a blocking {@link Prompt}, or `null` to allow.
  * @param projectRoot - Project root forwarded to {@link isShadcnWrite}.
+ * @param hostId - Running host id (sub-skill paths printed are that host's own; absent = Claude Code, unchanged).
  */
 export function shadcnSkillGate(
   tool: string,
@@ -80,6 +81,7 @@ export function shadcnSkillGate(
   content: string,
   ev: ShadcnEvidence,
   projectRoot?: string,
+  hostId?: string,
 ): Prompt | null {
   if (!isShadcnWrite(tool, filePath, projectRoot) || isReleaseMetadataPath(filePath)) return null;
   if (!shadcnBaseSkillRead(ev.refsRead) && !shadcnMcpConsulted(ev.authorizations, ev.sessionId)) {
@@ -90,7 +92,7 @@ export function shadcnSkillGate(
       actions: ["Read skills/shadcn-detection/ or skills/shadcn-components/, or call mcp__shadcn__search_items_in_registries, then retry"],
     };
   }
-  const domainBlock = skillTriggerGate("shadcn", content, ev.refsRead);
+  const domainBlock = skillTriggerGate("shadcn", content, ev.refsRead, undefined, undefined, undefined, hostId);
   if (domainBlock) return domainBlock;
   return docConsultedGate({
     sessionId: ev.sessionId,
