@@ -4,6 +4,22 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.124] - 2026-11-17
+
+### Fixed
+
+- **normalize: NotebookEdit and MultiEdit reach the write gates** — `notebook_path`/`new_source` and `edits[]` payloads are mapped to an Edit-shaped event, so every Write/Edit gate sees them (before, both were allowed on protected paths where Write/Edit are denied). Tightening only. Tests: `write-tool-aliases`.
+- **tracking: receipt journal bound to session, sequence and hash chain** — cross-session replay, reordering, rollback and truncation of a track fail closed (empty track + explicit integrity failure); verifiers never mint a key on a fresh HOME. Legacy tracks stay readable; gate verdicts on valid tracks unchanged on every host id. Tests: `receipt-mac-binding`, `receipt-mac-chain`, `receipt-mac-migration`, `receipt-gate-verdicts`.
+- **one-shot: Bash-write gate credited when the denied target is fixed with Write/Edit** — metric only (`Nfix`, one-shot rate); deny/fix/abandon events logged. No verdict changes. Tests: `one-shot-bash-target`.
+
+### Tests
+
+- Three pre-existing flaky tests made hermetic under load and shell env; the 500-heredoc lexer perf test takes the min of 5 samples. No assertion weakened.
+
+### Documentation
+
+- Owner decisions journal, real-condition results 2026-11-11, codex rm-rule install record, rdv-sim root-cause report; `.kimi/` and `.kimi-code/` ignored.
+
 ## [0.1.123] - 2026-11-16
 
 ### Fixed
