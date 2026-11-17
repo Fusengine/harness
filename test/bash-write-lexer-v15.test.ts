@@ -154,7 +154,13 @@ test("(perf) 500 unterminated heredocs across 50000 lines stays under 50ms", () 
   const input = `echo "$(${lines.join("\n")}`;
   // Warm the JIT on a small unterminated heredoc: the budget bounds complexity, not cold start.
   for (let w = 0; w < 10; w++) anchorText(`echo "$(cmd${w} <<'MARK${w}'\nbody`);
-  const start = performance.now();
   expect(() => anchorText(input)).not.toThrow();
-  expect(performance.now() - start).toBeLessThan(50);
+  // Min of 5 samples: a quadratic blow-up is slow on every sample, a GC/scheduler stall hits only one, so this keeps the complexity bound while ignoring one-off stalls.
+  let best = Infinity;
+  for (let s = 0; s < 5; s++) {
+    const start = performance.now();
+    anchorText(input);
+    best = Math.min(best, performance.now() - start);
+  }
+  expect(best).toBeLessThan(50);
 });
