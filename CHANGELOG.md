@@ -4,6 +4,23 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.126] - 2026-11-17
+
+### Fixed
+
+- **apex: SKIP_DIRS matched on project-root-relative path segments** — an ancestor folder above the project named `build`, `dist`, `rebuild`, `distributed-sys`, etc. no longer disables APEX for the whole project (`trivial-edits.ts`, `gate-apex.ts`). Tests: `skip-dirs-relative`.
+- **protected-path: the `~/.fuse-harness` directory itself is protected** — `mv`, `rm` and trash of the directory (which holds the receipt state and HMAC key) are denied, not only its `state/` and `.key` children. Tightening only. Tests: `fuse-harness-dir-guard`.
+- **git-flow: branch and worktree deletion asks** — `git branch -d/-D`, `git push --delete`, `gh pr merge --delete-branch` and `git worktree remove` now ask, so the owner authorizes or refuses each deletion. Tests: `branch-delete-ask`.
+- **host-aware messages** — sniper reminders, rules-file names and skill paths in gate messages are resolved at runtime for the running host (Claude Code, Codex, Kimi, Cursor) and checked on disk, with neutral wording when nothing is found; host refs are selected per skill key (a host refs dir is used only if it loads at least one ref, else the base source); Claude-config hooks run by Cursor render as Cursor. Claude Code output unchanged. Tests: `host-aware-*`.
+
+### Changed
+
+- **Behaviour change: framework-aware routing prefers the framework's own `solid-<fw>` skill** (tanstack-start, react, nextjs), including on Claude Code — a TanStack Start project is pointed at `solid-tanstack-start`, not `solid-react`. Tests: `host-aware-routing`.
+
+### Tests
+
+- `bash-write-data-contexts` case (e) made robust: warm-up + min of 5 samples; the 5 ms bound and inputs are unchanged.
+
 ## [0.1.125] - 2026-11-17
 
 ### Fixed
