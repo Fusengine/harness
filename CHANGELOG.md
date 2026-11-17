@@ -4,6 +4,15 @@ All notable changes to `@fusengine/harness`. Format: [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.1.125] - 2026-11-17
+
+### Fixed
+
+- **tracking: fair track-lock acquisition** — compaction used a private 400 ms fixed-step wait and lost every race to appenders (CI H3 printed "write skipped"); all lock takers now share the 1000 ms budget with jittered backoff. `FUSE_TRACK_JOURNAL=0` and `withTrackLockSync` callers spill the write instead of dropping it. Tests: `track-lock-shared-budget`, `track-lock-starvation`; `track-journal-race` unchanged.
+- **protected-path: deny agent writes to the harness state dir and HMAC key** — Write/Edit and Bash writes to `~/.fuse-harness/state/` and `~/.fuse-harness/.key` are denied (normalised match: `//`, `/./`, `/../` cannot hide them); reads stay allowed, legacy protected paths keep their verdicts. Tightening only. Tests: `receipt-tamper-*`, `protected-path-new`.
+- **guards: receipt-store deny wins over a generic rm ask** — `rm` of the harness state dir or HMAC key was a liftable ask on Linux and real macOS homes; `denyOverAsk` turns ask into deny for receipt-store targets only.
+- **design-gate: UI/shadcn path fragments matched on the project-relative path** — a parent folder above the project no longer flips the design/shadcn skill-gate verdict (Check-1 flaked ~2% on random mkdtemp names); exemptions stay matched on the absolute path, so no new block is possible. Tests: `webrun-verdict-cwd-name`.
+
 ## [0.1.124] - 2026-11-17
 
 ### Fixed
