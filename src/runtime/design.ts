@@ -6,6 +6,7 @@ import { activeDesignAgent } from "../policy/design/flag";
 import { runDesignChecks } from "../policy/design/content-checks";
 import { uiDesignSkillGate } from "../policy/design/skill-gate";
 import { collectDesignEvidence } from "../policy/design/skill-evidence";
+import { resolveProjectDir } from "../util/project-dir";
 import { findDesignSystem, findDesignSystemForFile, recordPost, designSystemContentGate } from "./design-helpers";
 import { checkDesignSystemContent } from "./design-content-gate";
 import { designFilesGate } from "./design-files-gate";
@@ -29,7 +30,7 @@ export function designGate(payload: Record<string, unknown>, event: NormalizedEv
   // UI write — requires a design-skill read + ANY doc source (Context7/Exa/web).
   // Gemini is NEVER required. Runs before the design-agent pipeline state logic.
   if (event.phase !== "post" && (event.tool === "Write" || event.tool === "Edit")) {
-    const skillBlock = uiDesignSkillGate(event.tool, event.filePath ?? "", event.content ?? "", collectDesignEvidence(event.sessionId, cwd));
+    const skillBlock = uiDesignSkillGate(event.tool, event.filePath ?? "", event.content ?? "", collectDesignEvidence(event.sessionId, cwd), resolveProjectDir(cwd));
     if (skillBlock) return skillBlock;
   }
   // Codex apply_patch parity (D2 gap, docstring design-files-gate.ts:17-24): the
@@ -41,9 +42,10 @@ export function designGate(payload: Record<string, unknown>, event: NormalizedEv
   // early-return — never narrowed to design-agent-only.
   if (event.phase !== "post" && event.files && event.files.length > 0) {
     const evidence = collectDesignEvidence(event.sessionId, cwd);
+    const projectRoot = resolveProjectDir(cwd);
     for (const f of event.files) {
       if (f.op === "delete") continue;
-      const skillBlock = uiDesignSkillGate(f.op === "add" ? "Write" : "Edit", f.filePath, f.content, evidence);
+      const skillBlock = uiDesignSkillGate(f.op === "add" ? "Write" : "Edit", f.filePath, f.content, evidence, projectRoot);
       if (skillBlock) return skillBlock;
     }
   }

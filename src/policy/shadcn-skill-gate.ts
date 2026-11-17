@@ -14,6 +14,7 @@ import type { AuthEntry } from "../freshness/doc-helpers";
 import { skillTriggerGate } from "./skill-triggers";
 import { docConsultedGate } from "./apex";
 import { isReleaseMetadataPath } from "./release-metadata-path";
+import { projectRelativePath } from "./project-relative";
 
 /** File extensions the shadcn gate polices (source: `\.(tsx|jsx|css|scss|json)$`). */
 const SHADCN_FILE_RE = /\.(tsx|jsx|css|scss|json)$/;
@@ -42,11 +43,12 @@ export interface ShadcnEvidence {
  * True when this Write/Edit is shadcn-scoped: a `.tsx/.jsx/.css/.scss/.json`
  * file under a `components|ui|shadcn|components.json` path, outside vendored
  * dirs. Ports `check-skill-loaded.py`'s file-path filter (lines 35-42).
+ * @param projectRoot - Project root; when given, the path fragments are matched against the project-relative path only.
  */
-export function isShadcnWrite(tool: string, filePath: string): boolean {
+export function isShadcnWrite(tool: string, filePath: string, projectRoot?: string): boolean {
   if (tool !== "Write" && tool !== "Edit") return false;
   if (!SHADCN_FILE_RE.test(filePath) || EXEMPT_RE.test(filePath)) return false;
-  return SHADCN_PATH_RE.test(filePath);
+  return SHADCN_PATH_RE.test(projectRelativePath(filePath, projectRoot));
 }
 
 /** True when `shadcn-detection/` or `shadcn-components/` was read this session (Phase 1 base skill). */
@@ -70,14 +72,16 @@ export function shadcnMcpConsulted(authorizations: Record<string, AuthEntry> | u
  * requires doc research, delegated to the existing {@link docConsultedGate}
  * (Context7 AND Exa, or a web fallback alone — not the Python's strict AND).
  * Returns a blocking {@link Prompt}, or `null` to allow.
+ * @param projectRoot - Project root forwarded to {@link isShadcnWrite}.
  */
 export function shadcnSkillGate(
   tool: string,
   filePath: string,
   content: string,
   ev: ShadcnEvidence,
+  projectRoot?: string,
 ): Prompt | null {
-  if (!isShadcnWrite(tool, filePath) || isReleaseMetadataPath(filePath)) return null;
+  if (!isShadcnWrite(tool, filePath, projectRoot) || isReleaseMetadataPath(filePath)) return null;
   if (!shadcnBaseSkillRead(ev.refsRead) && !shadcnMcpConsulted(ev.authorizations, ev.sessionId)) {
     return {
       kind: "block",

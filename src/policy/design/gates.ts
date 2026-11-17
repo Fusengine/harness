@@ -53,7 +53,7 @@ export function geminiEnabled(): boolean {
 }
 
 /** Inputs for {@link designPassNotice} — primitives only, so policy stays runtime-free. */
-export interface PassNoticeInput { agentId: string; tool: string; filePath: string; content: string; url: string; phase: "pre" | "post" }
+export interface PassNoticeInput { agentId: string; tool: string; filePath: string; content: string; url: string; phase: "pre" | "post"; projectRoot?: string }
 
 /**
  * Python-parity pass notices (`hook_output.allow_pass`/`post_pass`): the
@@ -67,7 +67,7 @@ export function designPassNotice(i: PassNoticeInput & { corpusMissing?: boolean 
   const isWrite = i.tool === "Write" || i.tool === "Edit";
   const fp = i.filePath;
   const lines: string[] = [];
-  if (i.phase === "pre" && isUiWrite(i.tool, fp, i.content)) {
+  if (i.phase === "pre" && isUiWrite(i.tool, fp, i.content, i.projectRoot)) {
     const domains = SKILL_TRIGGERS.filter((t) => t.patterns.some((re) => re.test(i.content))).map((t) => t.skill).join(", ");
     lines.push(`check-design-skill: pass (domain: ${domains || "base"})`);
   }

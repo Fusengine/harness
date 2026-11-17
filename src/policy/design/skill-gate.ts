@@ -10,6 +10,7 @@
  * @packageDocumentation
  */
 import type { Prompt } from "../../prompt/types";
+import { projectRelativePath } from "../project-relative";
 import { missingDomainSkills } from "./skill-triggers";
 
 /** UI source files the gate polices (.html/.css are handled by the pipeline gate, not here). */
@@ -29,11 +30,14 @@ export interface DesignEvidence {
   docConsulted: boolean;
 }
 
-/** True when this Write/Edit targets a UI file in a UI-ish path or with Tailwind classes. */
-export function isUiWrite(tool: string, filePath: string, content: string): boolean {
+/**
+ * True when this Write/Edit targets a UI file in a UI-ish path or with Tailwind classes.
+ * @param projectRoot - Project root; when given, UI path fragments are matched against the project-relative path only.
+ */
+export function isUiWrite(tool: string, filePath: string, content: string, projectRoot?: string): boolean {
   if (tool !== "Write" && tool !== "Edit") return false;
   if (!UI_FILE_RE.test(filePath) || EXEMPT_RE.test(filePath)) return false;
-  return UI_PATH_RE.test(filePath) || TAILWIND_RE.test(content);
+  return UI_PATH_RE.test(projectRelativePath(filePath, projectRoot)) || TAILWIND_RE.test(content);
 }
 
 /** True when a design skill reference was read this session (scans the `refsRead` track). */
@@ -52,9 +56,10 @@ const block = (reason: string, action: string): Prompt => ({
  * @param filePath - the written file path.
  * @param content - the written content (snippet on Edit, full file on Write).
  * @param ev - the session evidence (refsRead + docConsulted).
+ * @param projectRoot - project root forwarded to {@link isUiWrite} (UI path fragments tested project-relative).
  */
-export function uiDesignSkillGate(tool: string, filePath: string, content: string, ev: DesignEvidence): Prompt | null {
-  if (!isUiWrite(tool, filePath, content)) return null;
+export function uiDesignSkillGate(tool: string, filePath: string, content: string, ev: DesignEvidence, projectRoot?: string): Prompt | null {
+  if (!isUiWrite(tool, filePath, content, projectRoot)) return null;
   if (!designSkillRead(ev.refsRead)) {
     return block(
       "BLOCKED: design skill not consulted before writing UI. Read a design SKILL.md "

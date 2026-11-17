@@ -10,6 +10,7 @@ import { frameworkSkillGate } from "./framework-skill-gate";
 import { reconcileRefReadsFromTranscript } from "../freshness/ref-evidence";
 import { reconcileRefReadsFromJournal } from "../freshness/ref-journal";
 import { isShadcnWrite, shadcnSkillGate } from "../policy/shadcn-skill-gate";
+import { resolveProjectDir } from "../util/project-dir";
 import { isTailwindWrite, tailwindSkillGate } from "../policy/tailwind-skill-gate";
 import { geminiMcpGate } from "../policy/gemini-mcp-gate";
 import { apexScopedGate } from "./gate-apex";
@@ -134,8 +135,9 @@ export async function runFileGates(input: GateInput, filePath: string, existingC
   const solidOrSkill = frameworkSkillGate(input, track.refsRead, existingCodeLines);
   if (solidOrSkill) return solidOrSkill;
   // Standalone shadcn/ui gate (ports check-skill-loaded.py): runs independently of `framework` since a components.json / .css write may detect as "generic", mirroring the real plugin's own PreToolUse hook alongside react's.
-  if (isShadcnWrite(input.tool, filePath)) {
-    const shadcnBlock = shadcnSkillGate(input.tool, filePath, input.content ?? "", { refsRead: track.refsRead, authorizations: track.authorizations, sessionId: input.sessionId });
+  const projectRoot = resolveProjectDir(input.cwd ?? "");
+  if (isShadcnWrite(input.tool, filePath, projectRoot)) {
+    const shadcnBlock = shadcnSkillGate(input.tool, filePath, input.content ?? "", { refsRead: track.refsRead, authorizations: track.authorizations, sessionId: input.sessionId }, projectRoot);
     if (shadcnBlock) return shadcnBlock;
   }
   // Standalone Tailwind base-skill gate (ports check-tailwind-skill.py Phase 1): a .tsx/.jsx write with Tailwind classes needs a base Tailwind skill read, independent of framework.
