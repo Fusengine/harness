@@ -11,8 +11,8 @@
  */
 import { appendFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { randomBytes } from "node:crypto";
-import { computeMac, loadOrCreateKey } from "./integrity";
+import { loadOrCreateKey } from "./integrity";
+import { buildEvent, chainTip, endsClean, sidOf, snapshotInfoOf, writeHead } from "./track-chain";
 import { LOCK_FAILED, withTrackLockSyncBlocking } from "./track-lock-sync";
 import { spillEvent } from "./track-spill";
 import { emptyTrack, PRD_VIOLATIONS_CAP, type PrdViolationRecord, type SessionTrack } from "./session-state";
@@ -20,45 +20,48 @@ import type { AuthEntry } from "../freshness/doc-helpers";
 import type { SessionTarget } from "../policy/apex-authorization";
 import type { Receipt } from "./receipts";
 
-/** One signed journal line: `mac` = HMAC over `"<nonce>:<JSON{field,op,value,ts}>"`. */
-export type TrackEvent = { v: 1; field: string; op: "add" | "max" | "append" | "merge" | "set"; value: unknown; ts: number; nonce: string; mac: string };
+/**
+ * One journal line. v2 (current): `mac` covers `{k, sid, seq, prev, field, op, value, ts}` + nonce — `seq`/`prev` present = chained main-log line, absent = lock-free spill line (sid-bound only). v1 (legacy, read-only): `mac` over `{field, op, value, ts}` + nonce, no session/position binding.
+ */
+export type TrackEvent = { v: 1 | 2; field: string; op: "add" | "max" | "append" | "merge" | "set"; value: unknown; ts: number; nonce: string; mac: string; sid?: string; seq?: number; prev?: string };
 
-/** Hard cap per line — short lines stay non-interleaved under O_APPEND. */
-const MAX_LINE = 32 * 1024;
 /** Trivial-edit sliding window for the fold (mirrors gate.ts DEFAULT_WINDOW_MS). */
 const TRIVIAL_WINDOW_MS = 120_000;
 
-/** Sign one event: an oversized STRING value is truncated then re-signed (never an unsigned partial line); an oversized non-string is dropped (null). */
-export function signEvent(field: string, op: TrackEvent["op"], value: unknown, ts: number): TrackEvent | null {
-  let data = JSON.stringify({ field, op, value, ts });
-  if (data.length > MAX_LINE - 256) {
-    if (typeof value !== "string") return null;
-    value = value.slice(0, Math.max(0, value.length - (data.length - (MAX_LINE - 256))));
-    data = JSON.stringify({ field, op, value, ts });
-  }
-  const nonce = randomBytes(8).toString("hex");
-  return { v: 1, field, op, value, ts, nonce, mac: computeMac(loadOrCreateKey(), data, nonce) };
+/** Sign one UNCHAINED (spill-form) event bound to session `sid`: an oversized STRING value is truncated then re-signed (never an unsigned partial line); an oversized non-string is dropped (null). */
+export function signEvent(field: string, op: TrackEvent["op"], value: unknown, ts: number, sid = ""): TrackEvent | null {
+  return buildEvent(loadOrCreateKey(), sid, field, op, value, ts);
 }
 
 /**
- * Append one signed event under the BOUNDED blocking track lock (same
+ * Append one signed, CHAINED event (session id + monotonic seq + previous
+ * line's MAC, see track-chain) under the BOUNDED blocking track lock (same
  * `track.lock` as the compaction — an append can never straddle
- * rename/fold/unlink). If the lock stays busy past the budget
- * (`FUSE_TRACK_LOCK_BUDGET_MS`), the event is SPILLED to its own lock-free
- * file ({@link spillEvent}) that every reader folds and the compactor
- * absorbs — the hook never waits unboundedly and the event is never lost.
- * Fail-open (`false`) only on a genuine I/O error.
+ * rename/fold/unlink; the lock also serialises seq assignment). The key is
+ * created HERE (write path) and nowhere on read. If the lock stays busy past
+ * the budget (`FUSE_TRACK_LOCK_BUDGET_MS`), the event is SPILLED unchained to
+ * its own lock-free file ({@link spillEvent}) that every reader folds and the
+ * compactor absorbs — the hook never waits unboundedly and the event is never
+ * lost. Fail-open (`false`) only on a genuine I/O error.
  */
 export function appendEvent(logPath: string, field: string, op: TrackEvent["op"], value: unknown, ts: number): boolean {
   try {
-    const ev = signEvent(field, op, value, ts);
-    if (!ev) return false;
-    const r = withTrackLockSyncBlocking(dirname(logPath), () => appendFileSync(logPath, JSON.stringify(ev) + "\n", "utf8"));
+    const key = loadOrCreateKey(), sid = sidOf(logPath);
+    const r = withTrackLockSyncBlocking(dirname(logPath), () => {
+      const ev = buildEvent(key, sid, field, op, value, ts, chainTip(logPath, key, () => snapshotInfoOf(logPath, key)));
+      if (!ev) return false;
+      appendFileSync(logPath, (endsClean(logPath) ? "" : "\n") + JSON.stringify(ev) + "\n", "utf8");
+      writeHead(logPath, key, { seq: ev.seq!, mac: ev.mac });
+      return true;
+    });
     if (r === LOCK_FAILED) {
       process.stderr.write(`harness: track lock busy past budget, event spilled (${logPath})\n`);
+      const ev = buildEvent(key, sid, field, op, value, ts);
+      if (!ev) return false;
       spillEvent(logPath, ev);
+      return true;
     }
-    return true;
+    return r;
   } catch { return false; }
 }
 

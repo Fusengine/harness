@@ -35,6 +35,14 @@ export interface TrackEnvelope {
   mac: string;
 }
 
+/** The per-machine key if it exists — NEVER creates it (read/verify paths must not mint a key: a verifier on a fresh HOME would otherwise accept an empty track as valid under a brand-new key). `null` = no key yet. */
+export function readKey(): string | null {
+  try {
+    const k = readFileSync(keyPath(), "utf8").trim();
+    return k || null;
+  } catch { return null; }
+}
+
 /** Load (or create on first use) the per-machine HMAC key stored at mode 0600. */
 export function loadOrCreateKey(): string {
   mkdirSync(harnessDir(), { recursive: true });
@@ -90,8 +98,13 @@ export function signTrack(track: SessionTrack): TrackEnvelope {
  * tampering). The nonce is NOT checked — see module JSDoc.
  */
 export function verifyTrack(envelope: TrackEnvelope): SessionTrack | null {
+  const key = readKey(); // read path: never creates the key
+  return key === null ? null : verifyEnvelope(envelope, key);
+}
+
+/** Verify an envelope against an explicit key (null on MAC mismatch / parse failure). */
+export function verifyEnvelope(envelope: TrackEnvelope, key: string): SessionTrack | null {
   try {
-    const key = loadOrCreateKey();
     if (envelope.mac !== computeMac(key, envelope.data, envelope.nonce)) return null;
     return JSON.parse(envelope.data) as SessionTrack;
   } catch {
