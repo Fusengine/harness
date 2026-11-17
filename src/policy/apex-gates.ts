@@ -3,6 +3,7 @@ import { skillRefKey } from "../refs/ref-key";
 import type { Prompt } from "../prompt/types";
 import { DEFAULT_TTL_SEC, ttlLabel } from "../config/ttl";
 import { PLUGINS_DIR, SOLID_REF } from "./file-size";
+import { hostRoutedPaths, isNonClaudeHost, solidSkillDir } from "./host-skill-paths";
 import type { ApexContext, ApexGate } from "./apex";
 
 /**
@@ -20,10 +21,16 @@ function refReadFresh(ctx: ApexContext, path: string, windowMs: number): boolean
   return at === undefined || ctx.now === undefined || ctx.now - at < windowMs;
 }
 
+/** The "read the framework skill" action for a non-Claude host: an existing path, else neutral wording. */
+function nonClaudeSkillAction(ref: string, ctx: ApexContext): string {
+  const dir = solidSkillDir(ref, ctx.hostId as string);
+  return dir ? `Read ${dir}SKILL.md` : `Read the ${ctx.framework} SOLID skill from your own skills directory`;
+}
+
 /** Gate: the routed SOLID references for this edit must have been read within the TTL. */
 export const solidReadGate: ApexGate = (ctx: ApexContext) => {
   if (!ctx.refs?.length) return null;
-  const routed = routeReferences(ctx.refs, ctx.filePath, ctx.content);
+  const routed = routeReferences(ctx.refs, ctx.filePath, ctx.content, "", ctx.framework);
   const windowMs = ctx.windowMs ?? DEFAULT_TTL_SEC * 1000;
   const ttl = ttlLabel(Math.round(windowMs / 1000));
   if (!routed) {
@@ -37,7 +44,8 @@ export const solidReadGate: ApexGate = (ctx: ApexContext) => {
       kind: "block",
       title: `APEX: no SOLID reference matched ${ctx.filePath}`,
       reason: `${ctx.refs.length} SOLID reference(s) are loaded but none scored for this edit (expires every ${ttl}) — read the framework skill directly instead.`,
-      actions: [`Read ${PLUGINS_DIR}/${ref}SKILL.md`],
+      // A non-Claude host is pointed at a skill dir that exists (its own, else the real discovered one), never the phantom `~/.claude` string.
+      actions: [isNonClaudeHost(ctx.hostId) ? nonClaudeSkillAction(ref, ctx) : `Read ${PLUGINS_DIR}/${ref}SKILL.md`],
     };
   }
   // Only reads still inside the TTL window count — a stale read re-blocks
@@ -61,19 +69,19 @@ export const solidReadGate: ApexGate = (ctx: ApexContext) => {
   const skillRead = !!routed.skillPath && credited(routed.skillPath);
   const missing = skillRead ? [] : routed.required.map((r) => r.meta.filePath).filter((p) => !credited(p));
   if (missing.length === 0) return null;
-  const optional = routed.optional.map((r) => r.meta.filePath);
+  const hostPaths = hostRoutedPaths(routed, ctx, missing);
   const reason = [
     // H2b: the credit needs the routed refs read — say ALL of them (the
     // Optional line counts too) and that a retry is EXPECTED once read.
     `Read ALL references below (including Optional), then retry — required before editing ${ctx.filePath} (expires every ${ttl}):`,
-    ...(optional.length ? [`Optional: ${optional.join(", ")}`] : []),
-    `Full skill: ${routed.skillPath}`,
+    ...(hostPaths.optional.length ? [`Optional: ${hostPaths.optional.join(", ")}`] : []),
+    ...(hostPaths.skillPath === null ? [] : [`Full skill: ${hostPaths.skillPath}`]),
   ].join("\n");
   return {
     kind: "block",
     title: `APEX: read SOLID references for ${ctx.framework}`,
     reason,
-    actions: missing,
+    actions: hostPaths.actions,
   };
 };
 

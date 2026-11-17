@@ -75,7 +75,7 @@ export function finalizeGate(input: GateInput, prompt: Prompt | null, command: s
   const op = { filePath: input.filePath, content: input.content, command };
   const dir = dirname(input.trackFile);
   recordOneShot(prompt, op, { now: input.now, dir, sessionId: input.sessionId, cwd: input.cwd });
-  return withDenyLoop(prompt, input.tool, op, { now: input.now, dir, windowMs: input.windowMs ?? DEFAULT_WINDOW_MS, sessionId: input.sessionId });
+  return withDenyLoop(prompt, input.tool, op, { now: input.now, dir, windowMs: input.windowMs ?? DEFAULT_WINDOW_MS, sessionId: input.sessionId, hostId: input.hostId });
 }
 
 /** Higher numeric values dominate while equal values preserve wire order. */
@@ -104,7 +104,7 @@ async function runStatefulGates(input: GateInput): Promise<Prompt | null> {
   const { raw: existingLines, code: existingCodeLines, content: existingContent } = existingLineCounts(input.filePath);
   let quick: PolicyResult;
   try {
-    quick = evaluate({ tool: input.tool, filePath: input.filePath, content: input.content, command: input.command, scratchpadDir: input.scratchpadDir, cwd: input.payloadCwd, agentType: input.agentType, agentId: input.agentId, existingLines, existingContent, oldString: input.oldString, isReplaceAll: input.isReplaceAll, neverApproval: input.neverApproval });
+    quick = evaluate({ tool: input.tool, filePath: input.filePath, content: input.content, command: input.command, scratchpadDir: input.scratchpadDir, cwd: input.payloadCwd, agentType: input.agentType, agentId: input.agentId, existingLines, existingContent, oldString: input.oldString, isReplaceAll: input.isReplaceAll, neverApproval: input.neverApproval, hostId: input.hostId });
   } catch {
     return FAIL_CLOSED;
   }
@@ -137,12 +137,12 @@ export async function runFileGates(input: GateInput, filePath: string, existingC
   // Standalone shadcn/ui gate (ports check-skill-loaded.py): runs independently of `framework` since a components.json / .css write may detect as "generic", mirroring the real plugin's own PreToolUse hook alongside react's.
   const projectRoot = resolveProjectDir(input.cwd ?? "");
   if (isShadcnWrite(input.tool, filePath, projectRoot)) {
-    const shadcnBlock = shadcnSkillGate(input.tool, filePath, input.content ?? "", { refsRead: track.refsRead, authorizations: track.authorizations, sessionId: input.sessionId }, projectRoot);
+    const shadcnBlock = shadcnSkillGate(input.tool, filePath, input.content ?? "", { refsRead: track.refsRead, authorizations: track.authorizations, sessionId: input.sessionId }, projectRoot, input.hostId);
     if (shadcnBlock) return shadcnBlock;
   }
   // Standalone Tailwind base-skill gate (ports check-tailwind-skill.py Phase 1): a .tsx/.jsx write with Tailwind classes needs a base Tailwind skill read, independent of framework.
   if (isTailwindWrite(input.tool, filePath, input.content ?? "")) {
-    const twBlock = tailwindSkillGate(input.tool, filePath, input.content ?? "", track.refsRead);
+    const twBlock = tailwindSkillGate(input.tool, filePath, input.content ?? "", track.refsRead, input.hostId);
     if (twBlock) return twBlock;
   }
   // OPT-IN Gemini Design MCP gate (ports enforce-gemini-mcp.py) — a no-op unless FUSE_ENFORCE_GEMINI_MCP is set, then blocks hand-written Tailwind UI until a mcp__gemini-design__* call is made this session.

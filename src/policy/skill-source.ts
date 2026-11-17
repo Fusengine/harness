@@ -8,6 +8,7 @@
  * table drifts from what is actually installed).
  */
 import { resolveSkillPath } from "./skill-path";
+import { existingSkillPath, isNonClaudeHost } from "./host-skill-paths";
 
 /**
  * Fallback doc source when no SKILL.md can be promised: the consigne to query
@@ -43,10 +44,13 @@ const SKILL_NAMES: Record<string, string> = {
  * a nonexistent path (every option a deny offers must actually unblock).
  * @param framework - Detected framework (the `detectFramework()` domain).
  * @param pluginsDirOverride - Marketplace plugins dir override (tests).
+ * @param hostId - Running host id; a non-Claude host resolves in its own install first, then the real discovered path.
  */
-export function getSkillSource(framework: string, pluginsDirOverride?: string): string {
+export function getSkillSource(framework: string, pluginsDirOverride?: string, hostId?: string): string {
   const name = SKILL_NAMES[framework];
   if (!name) return CONTEXT7_SOURCE;
+  // A non-Claude host: its OWN installed skill, else the real discovered one on disk, else context7.
+  if (isNonClaudeHost(hostId)) return existingSkillPath(name, hostId as string, pluginsDirOverride) ?? CONTEXT7_SOURCE;
   const path = resolveSkillPath(name, pluginsDirOverride);
   return path.endsWith("/SKILL.md") ? path : CONTEXT7_SOURCE;
 }

@@ -8,9 +8,10 @@
 import { handleHook } from "../runtime/handle";
 import { resolveTtlSec } from "../config/ttl";
 import { loadDotenv } from "../config/dotenv";
-import { discoverRefs } from "../refs/discover";
-import type { HarnessId } from "../detect/harness";
 import { homedir } from "node:os";
+import { refsDirFor } from "../refs/refs-override";
+import { hostHome, messageHost } from "../policy/host-skill-paths";
+import type { HarnessId } from "../detect/harness";
 import { parseScope } from "./scope";
 import { isMalformedCursorStdin, isOversize, oversizeStdout, parseStdinRead } from "./hook-io";
 import { traceHook, type StdinRead } from "./stdin-text";
@@ -45,7 +46,7 @@ export async function runHookOnce(input: HookRunInput): Promise<HookRunOutput> {
   const marketplaces = (process.env.FUSE_HARNESS_MARKETPLACES ?? "fusengine-plugins").split(",").map((s) => s.trim()).filter(Boolean);
   let refsMemo: { value: string | undefined } | undefined;
   const lazyRefsDir = (): string | undefined => {
-    refsMemo ??= { value: process.env.FUSE_HARNESS_REFS || discoverRefs(homedir(), process.cwd(), marketplaces) || undefined };
+    refsMemo ??= { value: refsDirFor(homedir(), process.cwd(), marketplaces, messageHost(id), process.env, hostHome()) };
     return refsMemo.value;
   };
   let outcome: Awaited<ReturnType<typeof handleHook>>;

@@ -1,5 +1,10 @@
 import { readdirSync } from "node:fs";
 import { join, delimiter } from "node:path";
+import { HOME_DIR } from "../config/dotenv";
+import type { HarnessId } from "../detect/interfaces/types";
+
+/** Env var that relocates a host's home dir (`$CODEX_HOME`, `$KIMI_CODE_HOME`). */
+const HOST_HOME_ENV: Partial<Record<string, string>> = { codex: "CODEX_HOME", kimi: "KIMI_CODE_HOME" };
 
 /** Immediate subdirectory names of `p`, or `[]` when it is missing/inaccessible. */
 function subdirs(p: string): string[] {
@@ -8,6 +13,56 @@ function subdirs(p: string): string[] {
   } catch {
     return [];
   }
+}
+
+const VERSION_DIR = /^v?\d+(\.\d+)*([-+].*)?$/;
+
+/** Numeric dotted-segment compare of two version dir names (`1.0.100` > `1.0.39`). */
+function compareVersions(a: string, b: string): number {
+  const seg = (v: string): number[] => v.replace(/^v/, "").split(/[-+]/)[0]!.split(".").map(Number);
+  const [x, y] = [seg(a), seg(b)];
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+/**
+ * Deterministic order of sibling dir names: HIGHEST VERSION FIRST when every name
+ * is a version (`1.0.100` before `1.0.39`), otherwise plain name order. Never
+ * mtime- or readdir-dependent, so the same disk state always resolves the same way.
+ */
+function orderSiblings(names: string[]): string[] {
+  if (names.length < 2) return names;
+  if (names.every((n) => VERSION_DIR.test(n))) return [...names].sort((a, b) => compareVersions(b, a));
+  return [...names].sort();
+}
+
+/**
+ * The running host's OWN `skills/` parent dirs, resolved from where that host
+ * installed its plugins (its home dir, `$CODEX_HOME`/`$KIMI_CODE_HOME` aware):
+ * `<host home>/skills` and every `skills` dir found at most 5 levels under
+ * `<host home>/plugins` (Codex `plugins/cache/<mkt>/<plugin>/<ver>/skills`,
+ * Cursor `plugins/{cache,local}/...`). Any marketplace name counts: it is the
+ * host's own install. Empty for Claude Code (its layout is {@link skillParents}).
+ */
+export function hostSkillParents(id: string, home: string, env: Record<string, string | undefined>): string[] {
+  const seg = HOME_DIR[id as HarnessId];
+  if (!seg || id === "claude-code") return [];
+  const hostHome = env[HOST_HOME_ENV[id] ?? ""] || join(home, seg);
+  const out = [join(hostHome, "skills")];
+  const walk = (dir: string, depth: number): void => {
+    // Never descend into dot-directories (`.cartographer`, `.git`, ...): generated maps/VCS data are not installs and must not shadow a real skill.
+    for (const name of orderSiblings(subdirs(dir).filter((n) => !n.startsWith(".")))) {
+      if (name === "node_modules") continue;
+      const next = join(dir, name);
+      if (name === "skills") out.push(next);
+      else if (depth < 5) walk(next, depth + 1);
+    }
+  };
+  walk(join(hostHome, "plugins"), 1);
+  return out;
 }
 
 /**
@@ -44,6 +99,17 @@ function skillParents(home: string, cwd: string, marketplaces: string[]): string
 }
 
 /**
+ * The `<skill>/references` dirs of every `solid-*` skill under one `skills/` parent
+ * (in directory-name order; only skills that HAVE a `references` dir).
+ * @param parent - A `skills/` dir.
+ */
+export function listSkillRefDirs(parent: string): string[] {
+  return subdirs(parent)
+    .filter((skill) => skill.startsWith("solid-") && subdirs(join(parent, skill)).includes("references"))
+    .map((skill) => join(parent, skill, "references"));
+}
+
+/**
  * Auto-discover SOLID reference dirs (`<skill>/references` for every `solid-*`
  * skill) across the Claude/Codex/Cursor skill layouts — the fallback used when
  * `FUSE_HARNESS_REFS` is unset. Deduped by skill name (first source wins, so a
@@ -55,11 +121,17 @@ function skillParents(home: string, cwd: string, marketplaces: string[]): string
  *   `FUSE_HARNESS_MARKETPLACES`, default `["fusengine-plugins"]`); a marketplace
  *   absent from disk simply contributes nothing. Standalone
  *   `.claude`/`.codex`/`.cursor`/`.agents` skill roots are always scanned.
+ * @param id - Running host id. A non-Claude host scans its OWN install first
+ *   ({@link hostSkillParents}) so the paths the gates print are that host's
+ *   own; the shared layouts stay as fallback so a host without its own
+ *   `solid-*` skills keeps the gate on. Omitted / `claude-code`: unchanged.
+ * @param env - Environment (host-home overrides); defaults to `process.env`.
  * @returns A `path.delimiter`-joined list of `references` dirs, or `""`.
  */
-export function discoverRefs(home: string, cwd: string, marketplaces: string[]): string {
+export function discoverRefs(home: string, cwd: string, marketplaces: string[], id?: string, env: Record<string, string | undefined> = process.env): string {
   const bySkill = new Map<string, string>();
-  for (const parent of skillParents(home, cwd, marketplaces)) {
+  const parents = [...(id ? hostSkillParents(id, home, env) : []), ...skillParents(home, cwd, marketplaces)];
+  for (const parent of parents) {
     for (const skill of subdirs(parent)) {
       if (!skill.startsWith("solid-") || bySkill.has(skill)) continue;
       if (subdirs(join(parent, skill)).includes("references")) bySkill.set(skill, join(parent, skill, "references"));
@@ -67,3 +139,4 @@ export function discoverRefs(home: string, cwd: string, marketplaces: string[]):
   }
   return [...bySkill.values()].join(delimiter);
 }
+

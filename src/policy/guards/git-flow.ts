@@ -2,6 +2,7 @@ import type { Prompt } from "../../prompt/types";
 import type { GuardContext } from "./context";
 import { BRANCH_TYPES, branchNameProblem, createdBranches } from "../branch-name";
 import { expand } from "../effective-segments";
+import { GH_MERGE_VALUE_FLAGS } from "../patterns";
 
 /** `gh pr merge` argument that selects the squash or rebase strategy (`--squash`, `-s`, `--rebase`, `-r`, `-sd`…). */
 function isSquashOrRebase(arg: string): boolean {
@@ -9,14 +10,11 @@ function isSquashOrRebase(arg: string): boolean {
   return /^-[dmsr]+$/.test(arg) && /[sr]/.test(arg);
 }
 
-/** Flags of `gh pr merge` that consume the next token (their value is never a strategy flag). */
-const VALUE_FLAGS = new Set(["-b", "--body", "-F", "--body-file", "-t", "--subject", "-A", "--author-email", "--match-head-commit", "-R", "--repo"]);
-
-/** True when the `gh pr merge` arguments select squash or rebase (values of {@link VALUE_FLAGS} skipped). */
+/** True when the `gh pr merge` arguments select squash or rebase (values of {@link GH_MERGE_VALUE_FLAGS} skipped). */
 function usesSquashOrRebase(args: readonly string[]): boolean {
   for (let i = 0; i < args.length; i++) {
     const a = args[i] ?? "";
-    if (VALUE_FLAGS.has(a)) { i++; continue; }
+    if (GH_MERGE_VALUE_FLAGS.has(a)) { i++; continue; }
     if (isSquashOrRebase(a)) return true;
   }
   return false;

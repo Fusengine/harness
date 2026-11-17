@@ -1,4 +1,8 @@
+import { isAbsolute, relative } from "node:path";
 import type { Prompt } from "../prompt/types";
+import { isInsideRoot } from "../util/is-inside-root";
+import { resolveProjectDir } from "../util/project-dir";
+import { projectRootOrNull } from "../util/project-root";
 
 /**
  * Pre-filters of the ported enforce-apex-phases.ts hook, in Python order
@@ -13,6 +17,28 @@ export const PROTECTED_PATHS: RegExp = /\.claude\/(plugins\/(marketplaces|cache)
 
 /** Dependency/build dirs the APEX gates skip entirely (parity enforce-apex-phases.ts SKIP_DIRS). */
 export const SKIP_DIRS: RegExp = /(node_modules|vendor|dist|build|\.next|DerivedData)/;
+
+/** Same names as {@link SKIP_DIRS}, but each must be a WHOLE path segment (in-project matching). */
+const SKIP_SEGMENT: RegExp = /(?:^|[\\/])(?:node_modules|vendor|dist|build|\.next|DerivedData)(?:[\\/]|$)/;
+
+/**
+ * True when `filePath` lies in a dependency/build dir. Inside the project root
+ * a path is skipped only when one of its root-relative segments EQUALS a skip
+ * dir name, so a parent folder outside the project (`/srv/rebuild/app/src/a.ts`)
+ * or a lookalike (`src/rebuilder/a.ts`, `distribution/a.ts`) never disables the
+ * gates. No resolvable root, a relative path, or a path outside the root keeps
+ * the legacy whole-path {@link SKIP_DIRS} match.
+ * @param filePath - Target path of the edit (or undefined).
+ * @param cwd - Hook cwd, used (with CLAUDE_PROJECT_DIR) to resolve the project root.
+ * @returns Whether the APEX gates must skip this path.
+ */
+export function isSkippedPath(filePath: string | undefined, cwd?: string): boolean {
+  const p = filePath ?? "";
+  if (!isAbsolute(p) || !cwd) return SKIP_DIRS.test(p);
+  const root = projectRootOrNull(resolveProjectDir(cwd));
+  if (!root || !isInsideRoot(root, p)) return SKIP_DIRS.test(p);
+  return SKIP_SEGMENT.test(relative(root, p));
+}
 
 /**
  * Absolute deny on Write/Edit of hook-managed state paths, with the Python

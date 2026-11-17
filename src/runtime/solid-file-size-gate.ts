@@ -24,6 +24,7 @@ import type { Prompt } from "../prompt/types";
  * @param oldString - Edit only: the `old_string` being replaced.
  * @param isReplaceAll - Edit only: whether every occurrence is replaced.
  * @param agentType - Subagent type, when known (Explore/Plan are exempt).
+ * @param hostId - Running host id: a non-Claude host never gets the phantom `~/.claude` skill path in the deny (absent = Claude Code, message unchanged).
  * @returns The blocking prompt, or null when compliant or out of scope.
  */
 export function solidFileSizeGate(
@@ -33,6 +34,7 @@ export function solidFileSizeGate(
   oldString?: string,
   isReplaceAll: boolean = false,
   agentType?: string,
+  hostId?: string,
 ): Prompt | null {
   if (tool !== "Write" && tool !== "Edit") return null;
   if (!filePath || !isFileSizeScoped(filePath)) return null;
@@ -47,7 +49,7 @@ export function solidFileSizeGate(
   if (editResult !== null && (editResult <= max || editResult < existing)) return null;
   const lines = tool === "Edit" ? (editResult ?? Math.max(incoming, existing)) : incoming || existing;
   const displayLines = tool === "Write" ? (existingLines ?? lines) : lines;
-  const verdict = evaluateFileSize(lines, max, filePath, resolveSolidRefFramework(filePath), displayLines);
+  const verdict = evaluateFileSize(lines, max, filePath, resolveSolidRefFramework(filePath), displayLines, "", "", hostId);
   if (lines === 0 || verdict.ok) return null;
   return {
     kind: "block",

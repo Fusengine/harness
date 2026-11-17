@@ -82,7 +82,7 @@ function evaluateBase(ctx: PolicyContext): PolicyResult {
     // content is itself over the limit — the incoming count only ever gates
     // an early "shrunk to compliant" allow, it's never what gets displayed.
     const displayLines = ctx.tool === "Write" ? ctx.existingLines ?? lines : lines;
-    const verdict = evaluateFileSize(lines, max, ctx.filePath, framework, displayLines, ctx.target, ctx.patchPath);
+    const verdict = evaluateFileSize(lines, max, ctx.filePath, framework, displayLines, ctx.target, ctx.patchPath, ctx.hostId);
     if (lines > 0 && !verdict.ok) {
       return {
         decision: "deny",

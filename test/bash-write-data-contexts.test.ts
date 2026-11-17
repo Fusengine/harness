@@ -157,9 +157,14 @@ test("(e) guard stays under 5ms on 20 malformed 2000-char unbalanced quote/hered
   let max = 0;
   for (let i = 0; i < 20; i++) {
     const command = malformedInput(rng, 2000);
-    const start = performance.now();
+    // Warm-up call, then min of 5 samples: a super-linear blow-up is slow on every sample, a GC/scheduler stall hits only one, so the 5ms bound keeps its meaning while ignoring one-off stalls.
     bashWriteGuard(cmd(command));
-    const elapsed = performance.now() - start;
+    let elapsed = Infinity;
+    for (let s = 0; s < 5; s++) {
+      const start = performance.now();
+      bashWriteGuard(cmd(command));
+      elapsed = Math.min(elapsed, performance.now() - start);
+    }
     max = Math.max(max, elapsed);
     expect(elapsed).toBeLessThan(5);
   }

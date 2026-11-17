@@ -74,7 +74,46 @@ export function matchPatterns(cmd: string, patterns: ReadonlyArray<RegExp>): boo
  */
 export function matchGitPatterns(cmd: string, patterns: ReadonlyArray<RegExp>): boolean {
   if (matchPatterns(cmd, patterns)) return true;
+  if (patterns === GIT_ASK && removesBranchOrWorktree(cmd)) return true;
   return expand(cmd).items.some((item) => item.verb === "git" && matchPatterns(item.text, patterns));
+}
+
+/** Flags of `gh pr merge` that consume the next token (their value is never a strategy or delete flag). */
+export const GH_MERGE_VALUE_FLAGS: ReadonlySet<string> = new Set(["-b", "--body", "-F", "--body-file", "-t", "--subject", "-A", "--author-email", "--match-head-commit", "-R", "--repo"]);
+
+/** `git branch` arguments that delete: `-d`, `-D`, `--delete`, or a bundle of plain short flags holding one (`-fd`, `-df`). */
+function branchDeletes(args: readonly string[]): boolean {
+  for (const a of args) {
+    if (a === "--") return false;
+    if (a === "--delete") return true;
+    if (/^-[dDfrqavi]*[dD][dDfrqavi]*$/.test(a)) return true;
+  }
+  return false;
+}
+
+/** `gh pr merge` arguments that delete the branch (`--delete-branch`, `-d`, `-md`; values of {@link GH_MERGE_VALUE_FLAGS} skipped). */
+function mergeDeletesBranch(args: readonly string[]): boolean {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] ?? "";
+    if (GH_MERGE_VALUE_FLAGS.has(a)) { i++; continue; }
+    if (a === "--delete-branch" || a === "--delete-branch=true") return true;
+    if (/^-[dmsr]+$/.test(a) && a.includes("d")) return true;
+  }
+  return false;
+}
+
+/**
+ * True when a command the line really runs (wrappers and shell payloads
+ * descended) deletes a branch or a worktree: `git branch -d|-D|--delete`,
+ * `git worktree remove`, `gh pr merge --delete-branch|-d`. Only ever adds a
+ * confirmation: callers consult it after the destructive-git block gate.
+ */
+export function removesBranchOrWorktree(cmd: string): boolean {
+  return expand(cmd).items.some((item) => {
+    const [a = "", b = "", ...rest] = item.argv;
+    if (item.verb === "git") return (a === "branch" && branchDeletes([b, ...rest])) || (a === "worktree" && (b === "remove" || b === "rm"));
+    return item.verb === "gh" && a === "pr" && b === "merge" && mergeDeletesBranch(rest);
+  });
 }
 
 /** Git commands exempt from confirmation when Ralph mode is on (parity git-guard.py RALPH_SAFE). */

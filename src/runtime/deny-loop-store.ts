@@ -31,7 +31,7 @@ const SIDECAR = "deny-loop.json";
  * event count once, not once each; two sessions never share a counter. Omitted
  * by mono-process callers/tests → historical per-hash, no-dedup behaviour.
  */
-export interface DenyLoopOpts { now: number; dir: string; windowMs: number; sessionId?: string; }
+export interface DenyLoopOpts { now: number; dir: string; windowMs: number; sessionId?: string; /** Running host id: names the research agent in a repeat-deny action (default Claude Code). */ hostId?: string; }
 
 /** Load the `{ hash -> DenyEntry }` map, or `{}` when missing/corrupt. */
 function loadMap(path: string): Record<string, DenyEntry> {
@@ -90,5 +90,5 @@ export function recordDeny(tool: string, input: Record<string, unknown>, opts: D
 export function withDenyLoop(prompt: Prompt | null, tool: string, input: Record<string, unknown>, opts: DenyLoopOpts): Prompt | null {
   if (!prompt || prompt.kind !== "block") return prompt;
   const { isRepeat, count } = recordDeny(tool, input, opts);
-  return isRepeat ? enrichRepeatDeny(prompt, count) : prompt;
+  return isRepeat ? enrichRepeatDeny(prompt, count, opts.hostId) : prompt;
 }

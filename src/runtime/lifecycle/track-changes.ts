@@ -9,6 +9,7 @@ import { isCodeFile } from "./code-extensions";
 import type { SessionChanges } from "./code-edit-time";
 import { isAgentKey, isGateExemptAgent } from "./agent-files";
 import { isProjectCode } from "./project-code";
+import { hostAgentRef, hostRulesRef } from "../../policy/apex-target";
 
 /** `changes` block persisted in per-session state (counts and file list are always present once tracked). */
 type Changes = SessionChanges & { cumulativeCodeFiles: number; modifiedFiles: string[] };
@@ -24,10 +25,11 @@ const VERSION_FILE = /^_{0,2}version_{0,2}\.py$/;
  * @param filePath - The edited file path.
  * @param home - Home dir (defaults to `~`).
  * @param now - Clock (defaults to `Date.now()`).
- * @param ctx - Optional hook context: `agentId` (PostToolUse `agent_id`, per-agent attribution), `agentType` (a gate-exempt type such as sniper keeps its writes the lead's) and `cwd` (project-root fallback for {@link isProjectCode}).
+ * @param ctx - Optional hook context: `agentId` (PostToolUse `agent_id`, per-agent attribution), `agentType` (a gate-exempt type such as sniper keeps its writes the lead's) and `cwd` (project-root fallback for {@link isProjectCode}), `id` (harness id naming the host's own sniper agent / rules doc in the reminder; default "claude-code").
  * @returns The native hook stdout (possibly empty when not a code file).
  */
-export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, home: string = homedir(), now: number = Date.now(), ctx: { agentId?: unknown; agentType?: unknown; cwd?: string } = {}): string {
+export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, home: string = homedir(), now: number = Date.now(), ctx: { agentId?: unknown; agentType?: unknown; cwd?: string; id?: string } = {}): string {
+  const id = ctx.id ?? "claude-code";
   if (!filePath || !isCodeFile(filePath)) return "";
   const sid = sanitizeSessionId(sessionIdRaw) ?? "unknown";
   const state = loadSessionState(sid, home);
@@ -69,7 +71,7 @@ export function trackSessionChanges(sessionIdRaw: unknown, filePath: string, hom
   const fname = basename(filePath);
   const stdout = contextResponse(
     "PostToolUse",
-    `SNIPER VALIDATION REQUIRED: Code file '${fname}' was modified. You MUST now run the sniper agent (fuse-ai-pilot:sniper) to validate this modification before continuing. This is mandatory per CLAUDE.md rules.`,
+    `SNIPER VALIDATION REQUIRED: Code file '${fname}' was modified. You MUST now run the sniper agent (${hostAgentRef(id, "sniper")}) to validate this modification before continuing. This is mandatory per ${hostRulesRef(id)}.`,
   );
   // User-visible companion to the additionalContext reminder above (which only
   // reaches the agent, never the human) — rides the SAME oncePerWindow gate above,

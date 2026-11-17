@@ -8,6 +8,8 @@ import type { Prompt } from "../prompt/types";
  * adapter's tracking layer).
  */
 export interface ApexContext {
+  /** Running host id: a non-Claude host is never shown a `~/.claude` skill path in gate messages (absent = Claude Code). */
+  hostId?: string;
   sessionId: string;
   framework: string;
   filePath: string;

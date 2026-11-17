@@ -25,7 +25,7 @@ const GEMINI = "mcp__gemini-design__create_frontend";
  * Design-pipeline gate (effectful: reads/writes the design state + design-system.md).
  * Returns a Prompt to block, or null when this isn't a design-agent context / nothing fires.
  */
-export function designGate(payload: Record<string, unknown>, event: NormalizedEvent, cacheDir: string, cwd: string, corpusRootOverride?: string, pluginsRootOverride?: string): Prompt | null {
+export function designGate(payload: Record<string, unknown>, event: NormalizedEvent, cacheDir: string, cwd: string, corpusRootOverride?: string, pluginsRootOverride?: string, hostId?: string): Prompt | null {
   // UI design-skill gate (ports check-design-skill.py): fires for ANY agent on a
   // UI write — requires a design-skill read + ANY doc source (Context7/Exa/web).
   // Gemini is NEVER required. Runs before the design-agent pipeline state logic.
@@ -104,7 +104,7 @@ export function designGate(payload: Record<string, unknown>, event: NormalizedEv
     return designFilesGate(event.files, state, pluginsRoot, corpusRoot, corpusRequired, cwd, (fp) => findDesignSystemForFile(cwd, fp) !== "");
   }
   if (event.tool === NAV) {
-    return browserNavigateGate(state, typeof event.input.url === "string" ? event.input.url : "");
+    return browserNavigateGate(state, typeof event.input.url === "string" ? event.input.url : "", hostId);
   }
   if (event.tool === SHOT) return screenshotScrollGate(state);
   if (event.tool === GEMINI) {

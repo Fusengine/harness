@@ -45,6 +45,7 @@ export function solidScopeOutcome(
       event.oldString,
       event.input.replace_all === true,
       event.agentType,
+      id,
     );
   if (prompt) {
     return { stdout: withDenyNotice(id, respond(id, prompt), prompt, event.sessionId, dirname(file), now), exit: 0 };
