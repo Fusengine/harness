@@ -8,6 +8,7 @@ import { loadTrack } from "../src/tracking/store";
 import { isDocConsulted } from "../src/freshness/doc-helpers";
 import { isCodexNativeWebTool } from "../src/runtime/codex-web-tool";
 import { trackWatchResearch } from "../src/runtime/lifecycle/changelog-research";
+import { writeVerdict } from "./helpers/web-write-verdict";
 
 /**
  * Codex's native web tool (`web.run`, extension `codex-rs/ext/web-search`) is called from Code Mode as
@@ -78,16 +79,9 @@ async function stampedKeys(host: string, tool: string, input: Record<string, unk
   return Object.keys(track.authorizations ?? {}).sort();
 }
 
-/** Final Write verdict (normalized) on `file` after one consultation, in a plain tsconfig project. */
-async function writeVerdict(tool: string, input: Record<string, unknown>, file: string): Promise<string> {
-  const cwd = mkdtempSync(join(tmpdir(), "fh-cxweb-wv-"));
-  const sid = "s-cxweb-wv";
-  writeFileSync(join(cwd, "tsconfig.json"), "{}");
-  await handleHook("codex", { session_id: sid, hook_event_name: "PostToolUse", tool_name: tool, tool_input: input, tool_response: "ok", tool_use_id: "c1", cwd }, { now: 1000, cwd });
-  const path = join(cwd, "src", file);
-  const out = await handleHook("codex", { session_id: sid, hook_event_name: "PreToolUse", tool_name: "apply_patch", tool_input: { command: `*** Begin Patch\n*** Add File: ${path}\n+export const a = 1;\n*** End Patch` }, tool_use_id: "c2", cwd }, { now: 2000, cwd });
-  return JSON.stringify(out).split(cwd).join("<D>");
-}
+// writeVerdict (final Write verdict after one consultation) lives in test/helpers/web-write-verdict.ts: its
+// project dir name is digits-only so the design gate's whole-path UI fragments (`ui`, `nav`, ...) can never
+// match a random mkdtemp suffix and flip one twin (root cause of the Publish 0.1.124 failure).
 
 const FRAMEWORK_QUERIES = ["react useEffect", "laravel eloquent", "next app router", "weather in Paris", "swift concurrency", "cargo rust"];
 

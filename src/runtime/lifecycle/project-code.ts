@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { isInsideRoot as isInside } from "../../util/is-inside-root";
 import { isCodeFile } from "./code-extensions";
 import { isClaudeScratchpad } from "./scratchpad-path";
 
@@ -19,12 +20,6 @@ function canonical(path: string): string {
       cur = parent;
     }
   }
-}
-
-/** True when `path` equals `root` or lies below it (same path flavour: both lexical or both real). */
-function isInside(root: string, path: string): boolean {
-  const rel = relative(root, path);
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
 /** macOS per-user temp dir (`/var/folders/xx/yyyy/T`, with or without the `/private` prefix). */

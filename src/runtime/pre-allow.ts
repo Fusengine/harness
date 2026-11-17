@@ -11,6 +11,7 @@ import { resolveCorpusRoot } from "../policy/design/corpus";
 import { lessonFor } from "../policy/lessons/lesson-gate";
 import { lessonsFileFor } from "./lifecycle/lessons/state";
 import { projectRoot } from "../util/project-root";
+import { resolveProjectDir } from "../util/project-dir";
 import { oncePerWindow } from "./inject-dedup";
 import { sessionLessonOnce } from "./inject-session/lesson-once";
 import { projectStateDir } from "./project-state-dir";
@@ -79,7 +80,7 @@ export async function allowOutcome(
   const notice = designPassNotice({
     agentId,
     tool: event.tool, filePath: event.filePath ?? "", content: event.content ?? "",
-    url: typeof event.input.url === "string" ? event.input.url : "", phase: "pre",
+    url: typeof event.input.url === "string" ? event.input.url : "", phase: "pre", projectRoot: resolveProjectDir(cwd),
     corpusMissing: agentId !== "" && (corpusRoot ?? resolveCorpusRoot()) === "",
   }, mcpDir);
   // Claude Code: once per session/sub-agent (the shared-JSON window was pruned by short-window callers); other hosts keep oncePerWindow.
