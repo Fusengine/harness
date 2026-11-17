@@ -3,6 +3,7 @@ import { evaluate } from "../../policy/evaluate";
 import { formatPrompt, type Prompt } from "../../prompt/types";
 import { readStdin } from "../../util/runtime-io";
 import { commandToString } from "../../runtime/command-string";
+import { canonicalizeWriteTool } from "../../runtime/write-tool-aliases";
 
 /** Subset of the Claude Code hook stdin payload we consume. */
 export interface ClaudeHookInput {
@@ -80,10 +81,11 @@ export function toClaudeResponse(event: string, prompt: Prompt): string {
 
 /** Run the bundled policy over a Claude payload and return the native response string (deny/ask/additionalContext), or null to allow. */
 export function guard(input: ClaudeHookInput): string | null {
+  const aliased = canonicalizeWriteTool(input.tool_name ?? "", (input.tool_input ?? {}) as Record<string, unknown>);
   const result = evaluate({
-    tool: input.tool_name ?? "Write",
-    filePath: input.tool_input?.file_path,
-    content: input.tool_input?.content ?? input.tool_input?.new_string,
+    tool: aliased?.tool ?? input.tool_name ?? "Write",
+    filePath: aliased ? aliased.filePath : input.tool_input?.file_path,
+    content: aliased ? aliased.content : input.tool_input?.content ?? input.tool_input?.new_string,
     command: commandToString(input.tool_input?.command),
     scratchpadDir: typeof input.scratchpad_dir === "string" ? input.scratchpad_dir : undefined,
   });

@@ -73,7 +73,7 @@ export async function gateCommandCandidates(input: GateInput, candidates: readon
 export function finalizeGate(input: GateInput, prompt: Prompt | null, command: string | undefined): Prompt | null {
   const op = { filePath: input.filePath, content: input.content, command };
   const dir = dirname(input.trackFile);
-  recordOneShot(prompt, op, { now: input.now, dir, sessionId: input.sessionId });
+  recordOneShot(prompt, op, { now: input.now, dir, sessionId: input.sessionId, cwd: input.cwd });
   return withDenyLoop(prompt, input.tool, op, { now: input.now, dir, windowMs: input.windowMs ?? DEFAULT_WINDOW_MS, sessionId: input.sessionId });
 }
 

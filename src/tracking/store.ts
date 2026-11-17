@@ -19,9 +19,9 @@ import { emptyTrack, type SessionTrack } from "./session-state";
 import { signTrack, verifyTrack, writeLastNonce, type TrackEnvelope } from "./integrity";
 import { LOCK_FAILED, withTrackLock } from "./track-lock";
 import { dirname } from "node:path";
-import { appendEvent, foldEvents } from "./track-journal";
+import { appendEvent } from "./track-journal";
 import { diffTrackEvents } from "./track-diff";
-import { journalLogPath, maybeCompactJournal, readEvents } from "./track-compact";
+import { journalLogPath, maybeCompactJournal, readTrackSync } from "./track-compact";
 
 /** Journal mode is the default; `FUSE_TRACK_JOURNAL=0` reverts to the legacy locked RMW (see the module NOTE: =0 ignores the uncompacted journal — recoverable, keep the `.log`). */
 export function trackJournalEnabled(): boolean {
@@ -41,9 +41,8 @@ async function loadSnapshot(file: string): Promise<SessionTrack> {
  * folded on top. Fail closed on tampering (envelope MAC, per-line MAC).
  */
 export async function loadTrack(file: string): Promise<SessionTrack> {
-  const base = await loadSnapshot(file);
-  if (!trackJournalEnabled()) return base;
-  return foldEvents(readEvents(journalLogPath(file)), base);
+  if (!trackJournalEnabled()) return loadSnapshot(file);
+  return readTrackSync(file, true); // chain-verified, read-only; a failure = empty track + `integrityFailure` (explicit reason on stderr)
 }
 
 /** Journal-mode write: append the mutation's events, then maybe compact. */

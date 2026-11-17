@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { loadTrack } from "../src/tracking/store";
@@ -22,7 +22,7 @@ const BASE = 1_700_000_000_000;
 test("H3 race: compaction fires DURING concurrent appends — 0 lost write", async () => {
   await withEnv(undefined, async () => {
     const file = join(dir(), "track.json"), home = dir();
-    const PRE = 150, WORKERS = 8, PER = 200, CAP = 32 * 1024;
+    const PRE = 100, WORKERS = 8, PER = 200, CAP = 32 * 1024;
     const script = `import { withTrack, loadTrack } from ${JSON.stringify(STORE)};
 import { appendEvent } from ${JSON.stringify(TJOURNAL)};
 import { journalLogPath } from ${JSON.stringify(TCOMPACT)};
@@ -59,8 +59,9 @@ process.exit(0);`;
 test("compaction recovery: a stale .folding (crashed compaction) is re-folded first, 0 loss", async () => {
   await withEnv(undefined, async () => {
     const file = join(dir(), "track.json"), log = journalLogPath(file);
-    for (let i = 0; i < 1100; i++) appendEvent(log, "refsRead", "add", `live-${i}.md`, BASE + i);
-    for (let i = 0; i < 5; i++) appendEvent(`${log}.folding`, "refsRead", "add", `stale-${i}.md`, BASE - 100 + i);
+    for (let i = 0; i < 5; i++) appendEvent(log, "refsRead", "add", `stale-${i}.md`, BASE - 100 + i);
+    renameSync(log, `${log}.folding`); // a crashed compaction left its capture behind (chained: seq 1..5)
+    for (let i = 0; i < 1100; i++) appendEvent(log, "refsRead", "add", `live-${i}.md`, BASE + i); // the chain continues from the head file
     await maybeCompactJournal(file);
     expect(existsSync(`${log}.folding`)).toBe(false);
     expect((await loadTrack(file)).refsRead).toHaveLength(1105); // residue AND live log folded

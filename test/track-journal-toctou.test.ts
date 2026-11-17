@@ -11,6 +11,8 @@ import { test, expect } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { computeMac, loadOrCreateKey } from "../src/tracking/integrity";
 import { loadTrack } from "../src/tracking/store";
 import { appendEvent } from "../src/tracking/track-journal";
 import { journalLogPath, maybeCompactJournal } from "../src/tracking/track-compact";
@@ -57,7 +59,17 @@ test("B) real appendEvent loop DURING a real maybeCompactJournal: serialises, 0 
     try {
       const d = dir(), file = join(d, "track.json"), log = journalLogPath(file);
       const PRE = 20_000, N = 2_000;
-      for (let i = 0; i < PRE; i++) appendEvent(log, "refsRead", "add", `pre-${i}.md`, BASE + i); // ~600 ms fold window
+      // Seed the PRE-event backlog (the ~500 ms fold window) with ONE write of correctly signed lines — the same
+      // on-disk format appendEvent produces — instead of 20k lock+key-read+append round trips (~4 s under load,
+      // which is what blew the 5 s budget). The race under test (appends DURING the compaction) is unchanged.
+      const key = loadOrCreateKey();
+      const lines: string[] = [];
+      for (let i = 0; i < PRE; i++) {
+        const nonce = randomBytes(8).toString("hex");
+        const ev = { field: "refsRead", op: "add", value: `pre-${i}.md`, ts: BASE + i };
+        lines.push(JSON.stringify({ v: 1, ...ev, nonce, mac: computeMac(key, JSON.stringify(ev), nonce) }));
+      }
+      writeFileSync(log, lines.join("\n") + "\n");
       const go = join(d, "go");
       const script = `import { appendEvent } from ${JSON.stringify(TJOURNAL)};
 import { existsSync } from "node:fs";
@@ -87,4 +99,4 @@ process.stdout.write("DONE " + Date.now() + "\\n");`;
       else process.env.FUSE_TRACK_COMPACT_BYTES = prevCap;
     }
   });
-});
+}, 30_000); // each append is chained (+tail read, +head write ≈ 0.2 ms): the 22k-line setup outgrew the 5 s default

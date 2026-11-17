@@ -30,17 +30,18 @@ test("append → replay: the fold table (union, per-key max, append, merge, LWW)
   expect(t.brainstormRequired).toBe(false);
 });
 
-test("fail-closed PER LINE: a tampered/forged/malformed line is dropped, valid siblings survive", () => {
+test("fail-closed: an edited line fails the WHOLE journal explicitly (no valid sibling survives), junk lines are ignored", () => {
   const log = join(dir(), "track-b.log");
   appendEvent(log, "refsRead", "add", "good.md", BASE);
   appendEvent(log, "refsRead", "add", "good2.md", BASE + 1);
   const lines = readFileSync(log, "utf8").split("\n");
+  const junked = [...lines.slice(0, 1), "not-json{{{", ...lines.slice(1)].join("\n");
+  writeFileSync(log, junked, "utf8");
+  expect(foldEvents(readEvents(log)).refsRead).toEqual(["good.md", "good2.md"]); // crash residue is not tampering
   const forged = JSON.parse(lines[0]!) as TrackEvent;
   forged.value = "evil.md"; // the MAC no longer matches
-  lines[0] = JSON.stringify(forged);
-  lines.splice(1, 0, "not-json{{{");
-  writeFileSync(log, lines.join("\n"), "utf8");
-  expect(foldEvents(readEvents(log)).refsRead).toEqual(["good2.md"]);
+  writeFileSync(log, [JSON.stringify(forged), ...lines.slice(1)].join("\n"), "utf8");
+  expect(readEvents(log)).toEqual([]); // before the chain: ["good2.md"] survived; now the break is explicit (see test/receipt-mac-binding.test.ts)
 });
 
 test("line cap: an oversized string value is truncated then signed — never an unsigned partial line", () => {
