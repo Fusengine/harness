@@ -3,6 +3,7 @@ import { extractCursorEvent } from "../adapters/cursor/normalize";
 import { commandToString } from "./command-string";
 import { canonicalizeCodexShellTool } from "./codex-shell-tool";
 import { canonicalizeMcpToolName } from "./mcp-tool-name";
+import { canonicalizeWriteTool } from "./write-tool-aliases";
 
 /** One file/edit fanned out from Codex `apply_patch` or Cursor `afterFileEdit`. */
 export interface NormalizedFile {
@@ -82,8 +83,12 @@ export function normalizeEvent(id: string, payload: Record<string, unknown>): No
     };
   }
   const event = str(payload.hook_event_name) ?? "";
-  const input = (payload.tool_input as Record<string, unknown> | undefined) ?? payload;
-  const tool = canonicalizeCodexShellTool(id, canonicalizeMcpToolName(id, str(payload.tool_name) ?? ""));
+  const rawInput = (payload.tool_input as Record<string, unknown> | undefined) ?? payload;
+  const rawTool = canonicalizeCodexShellTool(id, canonicalizeMcpToolName(id, str(payload.tool_name) ?? ""));
+  // MultiEdit / NotebookEdit are file writes whose target lives in non-standard fields — alias them to an Edit-shaped event so no gate skips them.
+  const aliased = canonicalizeWriteTool(rawTool, rawInput);
+  const tool = aliased?.tool ?? rawTool;
+  const input = aliased?.input ?? rawInput;
   const base = {
     phase: (/post|after/i.test(event) ? "post" : "pre") as "pre" | "post",
     tool,
@@ -108,9 +113,9 @@ export function normalizeEvent(id: string, payload: Record<string, unknown>): No
   }
   return {
     ...base,
-    filePath: str(input.file_path) ?? str(input.path) ?? str(payload.file_path),
-    content: str(input.content) ?? str(input.new_string),
-    oldString: str(input.old_string),
+    filePath: aliased ? aliased.filePath : str(input.file_path) ?? str(input.path) ?? str(payload.file_path),
+    content: aliased ? aliased.content : str(input.content) ?? str(input.new_string),
+    oldString: aliased ? aliased.oldString : str(input.old_string),
     command: commandToString(input.command) ?? commandToString(payload.command),
   };
 }
