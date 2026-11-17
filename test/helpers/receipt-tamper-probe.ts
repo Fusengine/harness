@@ -3,14 +3,24 @@
  * attempts an agent with file access could make against the signed track journal / snapshot and prints, per
  * attempt, whether a forged or altered receipt is still ACCEPTED by `freshReceiptFromFile` (the TaskCompleted gate's read).
  */
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { computeMac, loadOrCreateKey, signTrack } from "../../src/tracking/integrity";
 import { freshReceiptFromFile } from "../../src/tracking/receipts";
-import { journalLogPath, parseEvents } from "../../src/tracking/track-compact";
+import { journalLogPath } from "../../src/tracking/track-compact";
+import { headPath, lineMacOk, parseLine } from "../../src/tracking/track-chain";
 import { appendEvent, signEvent, type TrackEvent } from "../../src/tracking/track-journal";
 import { emptyTrack } from "../../src/tracking/session-state";
 import type { Receipt } from "../../src/tracking/receipts";
+
+/** Raw journal lines whose own MAC verifies (no chain walk): the pre-0.1.124 `parseEvents`, kept here as a tamper-counting aid. */
+function parseEvents(text: string): TrackEvent[] {
+  const key = loadOrCreateKey();
+  return text.split("\n").flatMap((line) => {
+    const ev = line ? parseLine(line) : null;
+    return ev && lineMacOk(key, ev) ? [ev] : [];
+  });
+}
 
 const NOW = 1_000_000;
 const WINDOW = 60_000;
@@ -96,8 +106,8 @@ const sign = (r: Receipt): TrackEvent => signEvent("receipts", "append", r, r.ts
 { const s = session(); appendEvent(s.log, "receipts", "append", pass(NOW - 1000), NOW - 1000);
   const keyFile = join(process.env.HOME as string, ".fuse-harness", ".key"); const original = readFileSync(keyFile, "utf8");
   writeFileSync(keyFile, "attacker-chosen-key"); out.after_key_swap_old_lines_valid = accepted(s.file);
-  const value = pass(NOW - 1000); const data = JSON.stringify({ field: "receipts", op: "append", value, ts: value.ts });
-  appendFileSync(s.log, JSON.stringify({ v: 1, field: "receipts", op: "append", value, ts: value.ts, nonce: "0011223344556677", mac: computeMac(loadOrCreateKey(), data, "0011223344556677") }) + "\n");
+  // Since 0.1.124 a bare v1 line no longer verifies: the attacker (who holds the key) restarts the chain, dropping the old log and its head.
+  rmSync(s.log, { force: true }); rmSync(headPath(s.log), { force: true }); appendEvent(s.log, "receipts", "append", pass(NOW - 1000), NOW - 1000);
   out.after_key_swap_attacker_line_valid = accepted(s.file); writeFileSync(keyFile, original); }
 out.key_file_exists = existsSync(join(process.env.HOME as string, ".fuse-harness", ".key"));
 process.stdout.write(JSON.stringify(out));

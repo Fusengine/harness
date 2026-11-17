@@ -1,7 +1,7 @@
 import type { Prompt } from "../../prompt/types";
 import type { Guard, GuardContext } from "./context";
 import { securityGuard } from "./security";
-import { protectedPathGuard } from "./protected-path";
+import { protectedPathGuard, receiptStoreGuard } from "./protected-path";
 import { bashWriteGuard } from "./bash-write";
 import { interfaceSeparationGuard } from "./interface-separation";
 import { installGuard } from "./install";
@@ -62,7 +62,20 @@ export function runGuards(ctx: GuardContext): Prompt | null {
     } catch {
       return FAIL_CLOSED;
     }
-    if (hit) return hit;
+    if (hit) return hit.kind === "ask" ? denyOverAsk(hit, ctx) : hit;
   }
   return null;
+}
+
+/**
+ * A guard's ask must never hide the receipt-store / HMAC-key deny that sits later in the chain (the generic `rm` ask fires
+ * first and would otherwise decide `rm -rf <home>/.fuse-harness/state`). Only that one rule is consulted, so no other
+ * verdict moves; if it throws, the ask stands (the old verdict).
+ */
+function denyOverAsk(ask: Prompt, ctx: GuardContext): Prompt {
+  try {
+    return receiptStoreGuard(ctx) ?? ask;
+  } catch {
+    return ask;
+  }
 }

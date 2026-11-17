@@ -43,16 +43,17 @@ test("signed journal/snapshot: which tamper attempts are rejected, which are not
   expect(o.snapshot_edit_without_resign).toBe(false);
   expect(o.snapshot_delete_loses_receipts).toBe(false);
   expect(o.after_key_swap_old_lines_valid).toBe(false);
-  // STOPPED by the freshness window (receipts.ts freshPassingReceipt cutoff) and nonce dedup (track-compact.ts readEvents)
+  // STOPPED by the freshness window (receipts.ts freshPassingReceipt cutoff) and, since the 0.1.124 hash chain (track-chain/track-verify), by chain breaks
   expect(o.replay_stale_line).toBe(false);
-  expect(o.duplicate_lines_counted_once).toBe(true);
-  expect(o.reorder_changes_verdict).toBe(false);
+  expect(o.duplicate_lines_counted_once).toBe(false); // a duplicated line breaks the chain: the whole receipt is rejected (was: deduped by nonce)
+  expect(o.reorder_changes_verdict).toBe(true); // a reordered journal no longer verifies (was: order-independent)
   // NOT STOPPED: documented threat model (integrity.ts header: "the machine key is readable by the same agent process")
   expect(o.forge_with_read_key).toBe(true);
   expect(o.after_key_swap_attacker_line_valid).toBe(true);
   expect(o.key_mode_octal).toBe("600");
-  // NOT STOPPED: the MAC binds no session id, no sequence number, no hash chain
-  expect(o.replay_into_other_session).toBe(true);
+  // STOPPED since 0.1.124: the MAC binds the session id, a sequence number and the previous line's MAC (cross-session replay fails closed)
+  expect(o.replay_into_other_session).toBe(false);
+  // NOT re-measured by the probe (its `detected` field is a constant) and unchanged by the 0.1.124 fix:
   expect(o.snapshot_rollback_to_older_valid).toBe(true);
   expect(o.truncate_drops_failing_line).toEqual({ eventsBefore: 2, eventsAfter: 1, detected: false });
   expect(o.truncate_to_empty_receipt_survives).toBe(false); // deleting everything only ever loses proof (fail-closed for the receipt gate)

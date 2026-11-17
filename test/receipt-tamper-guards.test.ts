@@ -84,7 +84,7 @@ const attempts: ReadonlyArray<readonly [string, string, Record<string, unknown>,
   ["control: ln -s <key> /tmp/l (a read of the key)", "Bash", { command: `ln -s ${key} /tmp/l` }, "allow"],
   ["control: rsync <state>/ out (a read)", "Bash", { command: `rsync -a ${join(fuseHarnessHome(home), "state")}/ /tmp/bk/` }, "allow"],
   ["hole: rm -r (flag, not a value option)", "Bash", { command: `rm -r ${join(fuseHarnessHome(home), "state")}` }, "deny"],
-  ["hole: find <state> -exec rm", "Bash", { command: `find ${join(fuseHarnessHome(home), "state")} -type f -exec rm {} +` }, "ask"], // pipeline order: securityGuard's generic rm confirm fires before protected-path (which also denies it: see the guard-level differential)
+  ["hole: find <state> -exec rm", "Bash", { command: `find ${join(fuseHarnessHome(home), "state")} -type f -exec rm {} +` }, "deny"], // securityGuard's generic rm ask used to hide this deny (chain order); runGuards now lets the receipt-store deny win over an ask
   ["hole: find <state> -delete", "Bash", { command: `find ${join(fuseHarnessHome(home), "state")} -delete` }, "deny"],
   ["control: tar -C <state> -czf (a backup, a read)", "Bash", { command: `tar -C ${join(fuseHarnessHome(home), "state")} -czf /tmp/s.tgz .` }, "allow"],
   ["control: ln -s <key> with one operand", "Bash", { command: `ln -s ${key}` }, "allow"],
@@ -92,7 +92,8 @@ const attempts: ReadonlyArray<readonly [string, string, Record<string, unknown>,
   ["control: find -exec cp <key> {}", "Bash", { command: `find /tmp/x -name a -exec cp ${key} {} \\;` }, "allow"],
   ["control: sed -i -f <state>/s.sed (script file is read; the pipeline's generic sed -i rule denies it, protected-path does not)", "Bash", { command: `sed -i -f ${join(fuseHarnessHome(home), "state")}/s.sed /tmp/out.txt` }, "deny"],
   ["control: escaped quotes in a commit message", "Bash", { command: `git commit -m "He said \\"hi" -m "; rm ${key}"` }, "ask"], // "ask" = generic commit confirm, never the protected-path deny
-  ["control: rm of a path whose escaped-space prefix ends in ~ (generic rm confirm only, not the protected-path deny)", "Bash", { command: `rm /tmp/x\\ ${key}` }, "ask"],
+  ["hole: rm of an ABSOLUTE key path after an escaped space (a home containing a space; the guard matches it by design)", "Bash", { command: `rm /tmp/x\\ ${key}` }, "deny"],
+  ["control: rm of a path whose escaped-space prefix ends in a literal ~ (generic rm confirm only, not the protected-path deny)", "Bash", { command: "rm /tmp/x\\ ~/.fuse-harness/.key" }, "ask"],
   ["limit: cd into the harness home then a relative redirect (bash-write asks)", "Bash", { command: `cd ${fuseHarnessHome(home)} && echo x > .key` }, "ask"],
   ["limit: unresolvable variable path (no new rule)", "Bash", { command: `D=${fuseHarnessHome(home)}; cp /tmp/a $D/.key` }, "allow"],
   ["control: perl -M<module> reading the journal is not an in-place edit", "Bash", { command: `perl -Mstrict -e 'print 1' ${log}` }, "allow"],

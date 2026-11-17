@@ -36,6 +36,10 @@ wraps `evaluate`/`evaluateApex` the same way, so a bug can never disable enforce
 | `installGuard` | `npm/yarn/pnpm/bun/pip/cargo/go/gem/composer` + `brew/apt/dnf/pacman` installs | ask |
 | `opaqueShellGuard` | last in the chain: a command or shell payload built at run time that cannot be analysed (`sh -c "$CMD"`, `$CMD args`, …) | ask |
 
+An `ask` never hides the receipt-store deny: when a guard returns an ask (typically `securityGuard`'s generic
+`rm`), `runGuards` also consults `receiptStoreGuard` (the harness `state` dir and HMAC key rule of
+`protectedPathGuard`, nothing else) and returns its block instead. No other verdict moves.
+
 Plus, inside `evaluate()` after the chain:
 - **git** — destructive ops (`push --force`, `reset --hard`, `branch -D`…) → **block**;
   routine ops (`push`, `checkout`, `commit`, `add`, `branch -d`, `merge`…) → **ask**.

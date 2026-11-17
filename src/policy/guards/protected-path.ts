@@ -87,6 +87,18 @@ function extractWriteTargets(cmd: string): string[] {
 }
 
 /**
+ * Only the receipt-store / HMAC-key rule of {@link protectedPathGuard} (the harness `state` dir and `.key`), none of the
+ * legacy fragments. Lets the chain keep this one deny when an earlier guard's ask would otherwise hide it.
+ * @param ctx - The guard context.
+ * @returns A blocking {@link Prompt}, or null when the call does not write the state dir or key.
+ */
+export function receiptStoreGuard(ctx: GuardContext): Prompt | null {
+  if ((ctx.tool === "Write" || ctx.tool === "Edit") && ctx.filePath) return hitsNewPath(ctx.filePath) ? BLOCK : null;
+  if (ctx.tool === "Bash" && ctx.command) return newPathTargets(ctx.command).some(hitsNewPath) ? BLOCK : null;
+  return null;
+}
+
+/**
  * Blocks direct edits to internal/generated state directories.
  *
  * Covers:
@@ -98,16 +110,10 @@ function extractWriteTargets(cmd: string): string[] {
  * @returns A blocking {@link Prompt}, or null to allow.
  */
 export function protectedPathGuard(ctx: GuardContext): Prompt | null {
-  if ((ctx.tool === "Write" || ctx.tool === "Edit") && ctx.filePath) {
-    if (containsProtected(ctx.filePath)) return BLOCK;
-    // New paths (receipt store + HMAC key): normalised match, so `//`, `/./` and `/../` cannot hide them.
-    if (hitsNewPath(ctx.filePath)) return BLOCK;
-  }
-  if (ctx.tool === "Bash" && ctx.command) {
-    // Pre-existing protected paths keep EXACTLY the legacy heuristics (verdicts byte-identical to before).
-    if (extractWriteTargets(ctx.command).some(containsProtected)) return BLOCK;
-    // The harness state dir and key were unprotected before: only the precise extractor applies there, so no legacy over-block is inherited.
-    if (newPathTargets(ctx.command).some(hitsNewPath)) return BLOCK;
-  }
-  return null;
+  if ((ctx.tool === "Write" || ctx.tool === "Edit") && ctx.filePath && containsProtected(ctx.filePath)) return BLOCK;
+  // Pre-existing protected paths keep EXACTLY the legacy heuristics (verdicts byte-identical to before).
+  if (ctx.tool === "Bash" && ctx.command && extractWriteTargets(ctx.command).some(containsProtected)) return BLOCK;
+  // New paths (receipt store + HMAC key): normalised match, so `//`, `/./` and `/../` cannot hide them; for Bash only the
+  // precise extractor applies there (they were unprotected before), so no legacy over-block is inherited.
+  return receiptStoreGuard(ctx);
 }
