@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join, delimiter } from "node:path";
 import { HOME_DIR } from "../config/dotenv";
 import type { HarnessId } from "../detect/interfaces/types";
@@ -28,23 +28,15 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-/** Directory mtime (ms), 0 when unreadable. */
-function mtimeOf(p: string): number {
-  try { return statSync(p).mtimeMs; } catch { return 0; }
-}
-
 /**
- * Order the sibling dirs `names` of `dir`: HIGHEST VERSION FIRST when every name
- * is a version (`1.0.100` before `1.0.39`, not readdir order); MOST RECENTLY
- * MODIFIED first when they are install snapshots (hash-named dirs such as
- * Cursor's `plugins/cache/<mkt>/<plugin>/<hash>/`, recognised by holding a
- * `skills` dir); any other set is returned unchanged.
+ * Deterministic order of sibling dir names: HIGHEST VERSION FIRST when every name
+ * is a version (`1.0.100` before `1.0.39`), otherwise plain name order. Never
+ * mtime- or readdir-dependent, so the same disk state always resolves the same way.
  */
-function orderSiblings(dir: string, names: string[]): string[] {
+function orderSiblings(names: string[]): string[] {
   if (names.length < 2) return names;
   if (names.every((n) => VERSION_DIR.test(n))) return [...names].sort((a, b) => compareVersions(b, a));
-  if (names.some((n) => existsSync(join(dir, n, "skills")))) return [...names].sort((a, b) => mtimeOf(join(dir, b)) - mtimeOf(join(dir, a)));
-  return names;
+  return [...names].sort();
 }
 
 /**
@@ -61,7 +53,8 @@ export function hostSkillParents(id: string, home: string, env: Record<string, s
   const hostHome = env[HOST_HOME_ENV[id] ?? ""] || join(home, seg);
   const out = [join(hostHome, "skills")];
   const walk = (dir: string, depth: number): void => {
-    for (const name of orderSiblings(dir, subdirs(dir))) {
+    // Never descend into dot-directories (`.cartographer`, `.git`, ...): generated maps/VCS data are not installs and must not shadow a real skill.
+    for (const name of orderSiblings(subdirs(dir).filter((n) => !n.startsWith(".")))) {
       if (name === "node_modules") continue;
       const next = join(dir, name);
       if (name === "skills") out.push(next);
@@ -98,11 +91,22 @@ function skillParents(home: string, cwd: string, marketplaces: string[]): string
     for (const mkt of subdirs(cacheRoot)) {
       if (!marketplaces.includes(mkt)) continue;
       for (const plugin of subdirs(join(cacheRoot, mkt))) {
-        for (const ver of orderSiblings(join(cacheRoot, mkt, plugin), subdirs(join(cacheRoot, mkt, plugin)))) out.push(join(cacheRoot, mkt, plugin, ver, "skills"));
+        for (const ver of subdirs(join(cacheRoot, mkt, plugin))) out.push(join(cacheRoot, mkt, plugin, ver, "skills"));
       }
     }
   }
   return out;
+}
+
+/**
+ * The `<skill>/references` dirs of every `solid-*` skill under one `skills/` parent
+ * (in directory-name order; only skills that HAVE a `references` dir).
+ * @param parent - A `skills/` dir.
+ */
+export function listSkillRefDirs(parent: string): string[] {
+  return subdirs(parent)
+    .filter((skill) => skill.startsWith("solid-") && subdirs(join(parent, skill)).includes("references"))
+    .map((skill) => join(parent, skill, "references"));
 }
 
 /**
@@ -135,3 +139,4 @@ export function discoverRefs(home: string, cwd: string, marketplaces: string[], 
   }
   return [...bySkill.values()].join(delimiter);
 }
+

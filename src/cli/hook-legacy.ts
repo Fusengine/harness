@@ -9,8 +9,9 @@ import { detectHarness, type HarnessId } from "../detect/harness";
 import { handleHook } from "../runtime/handle";
 import { resolveTtlSec } from "../config/ttl";
 import { loadDotenv } from "../config/dotenv";
-import { discoverRefs } from "../refs/discover";
 import { homedir } from "node:os";
+import { refsDirFor } from "../refs/refs-override";
+import { hostHome, messageHost } from "../policy/host-skill-paths";
 import { parseScope } from "./scope";
 import { isMalformedCursorStdin, isOversize, oversizeStdout, readStdin, traceHook } from "./hook-io";
 import { exitHook, stdinReaderBlocked } from "./stdin-source";
@@ -29,7 +30,7 @@ export async function runLegacyHook(argv: string[]): Promise<never> {
   // refs are only consumed on the PreToolUse path: resolved on first read, memoized
   let refsMemo: { value: string | undefined } | undefined;
   const lazyRefsDir = (): string | undefined => {
-    refsMemo ??= { value: process.env.FUSE_HARNESS_REFS || discoverRefs(homedir(), process.cwd(), marketplaces, id) || undefined };
+    refsMemo ??= { value: refsDirFor(homedir(), process.cwd(), marketplaces, messageHost(id), process.env, hostHome()) };
     return refsMemo.value;
   };
   traceHook("args", { id, scope });

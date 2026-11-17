@@ -102,15 +102,15 @@ test("C: one rules-file table: apexDocName and hostRulesRef agree wherever the h
   for (const id of ["cursor", "cline", "gemini-cli", "hermes"]) expect(hostRulesRef(id)).toBe("your project rules");
 });
 
-test("D: several versions in a plugin cache → the highest semver wins (1.0.100 over 1.0.39), Claude and Codex", () => {
+test("D: the host-owned walk picks the highest semver (1.0.100 over 1.0.39); the shared/Claude base keeps its raw 1331bcd order (see host-aware-base-parity)", () => {
   const home = tmp();
   const cwd = tmp();
-  for (const [seg, mkt] of [[".claude", "m"], [".codex", "fusengine-codex"]] as const) {
+  for (const [seg, mkt] of [[".codex", "fusengine-codex"]] as const) {
     const base = join(home, seg, "plugins", "cache", mkt, "react-expert");
     mkSkill(join(base, "1.0.39", "skills"), "solid-react");
     const latest = mkSkill(join(base, "1.0.100", "skills"), "solid-react");
     mkSkill(join(base, "1.0.9", "skills"), "solid-react");
-    const id = seg === ".codex" ? "codex" : "claude-code";
-    expect(discoverRefs(home, cwd, ["m", "fusengine-codex"], id, {}).split(delimiter)).toEqual([latest]);
+    expect(seg).toBe(".codex");
+    expect(discoverRefs(home, cwd, ["m", "fusengine-codex"], "codex", {}).split(delimiter)).toEqual([latest]);
   }
 });

@@ -4,6 +4,7 @@ import { contextResponse } from "../adapters/claude";
 import { cursorEventContract } from "../adapters/cursor/events";
 import { toCursorLifecycleResponse } from "../adapters/cursor/respond";
 import type { NormalizedEvent } from "./normalize";
+import { messageHost } from "../policy/host-skill-paths";
 
 /** Raw event name from a payload (Cline lacks one; lifecycle is Claude-only). */
 function rawEvent(payload: Record<string, unknown>): string {
@@ -68,7 +69,7 @@ export async function postEditContext(scope: PluginScope, event: NormalizedEvent
   if (scope !== "core" || !event.filePath) return "";
   if (event.tool === "Read") return autoDocumentRead(event.filePath, now, id);
   if (event.tool !== "Write" && event.tool !== "Edit") return "";
-  const sniper = trackSessionChanges(event.sessionId, event.filePath, undefined, now, { agentId: event.agentId, agentType: event.agentType, cwd: event.cwd ?? cwd, id });
+  const sniper = trackSessionChanges(event.sessionId, event.filePath, undefined, now, { agentId: event.agentId, agentType: event.agentType, cwd: event.cwd ?? cwd, id: messageHost(id) });
   const lint = postEditTypescript(event.filePath);
   if (!sniper || !lint) return sniper || lint;
   return contextResponse("PostToolUse", `${additionalContextOf(sniper)}\n\n${additionalContextOf(lint)}`);

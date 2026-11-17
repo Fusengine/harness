@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, delimiter } from "node:path";
 import { parseFrontmatter } from "./frontmatter";
@@ -33,6 +34,29 @@ export function toRefMeta(fm: Record<string, string>, filePath: string): RefMeta
     level: pick(fm, "level") || inferLevel(filePath),
     filePath,
   };
+}
+
+/**
+ * How many refs {@link loadRefs} would load from ONE dir, WITHOUT throwing: it runs
+ * the same steps synchronously (recursive readdir, read every `.md` as utf8, parse
+ * its frontmatter into a {@link RefMeta}) and returns 0 on ANY failure (unreadable
+ * dir or file, dangling symlink, a directory named `a.md`). Used to decide whether a
+ * dir is safe to prefer over another source before the gate ever loads it.
+ * @param dir - One refs dir.
+ */
+export function loadableRefCount(dir: string): number {
+  try {
+    let n = 0;
+    for (const rel of readdirSync(dir, { recursive: true }) as string[]) {
+      if (!rel.endsWith(".md")) continue;
+      const filePath = join(dir, rel);
+      toRefMeta(parseFrontmatter(readFileSync(filePath, "utf8")), filePath);
+      n++;
+    }
+    return n;
+  } catch {
+    return 0;
+  }
 }
 
 /**

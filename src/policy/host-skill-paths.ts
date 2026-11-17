@@ -17,6 +17,24 @@ export function isNonClaudeHost(hostId: string | undefined): boolean {
   return !!hostId && hostId !== "claude-code";
 }
 
+/**
+ * The host whose own names and paths model-facing messages should use. Cursor also
+ * runs Claude Code hooks from `~/.claude/settings.json` (third-party hooks), which
+ * invoke the harness as `claude-code`. Cursor documents `CURSOR_VERSION` as always
+ * present in its hook processes (cursor.com/docs/hooks, "Environment Variables"),
+ * while real Claude Code sets `CLAUDECODE` / `CLAUDE_CODE_ENTRYPOINT`; so a
+ * `claude-code` invocation with `CURSOR_VERSION` and NO Claude Code marker is
+ * rendered as `cursor`. Only message text changes: verdicts and the response
+ * wire format keep using the invocation id.
+ * @param id - The harness id the CLI was invoked with.
+ * @param env - Environment; defaults to `process.env`.
+ */
+export function messageHost(id: string, env: Record<string, string | undefined> = process.env): string {
+  if (id !== "claude-code") return id;
+  const underCursor = !!env.CURSOR_VERSION?.trim() && !env.CLAUDECODE?.trim() && !env.CLAUDE_CODE_ENTRYPOINT?.trim();
+  return underCursor ? "cursor" : id;
+}
+
 /** What a routed-refs deny prints, already adapted to the running host. */
 export interface HostRoutedPaths {
   optional: string[];
@@ -43,6 +61,16 @@ export function hostRoutedPaths(routed: { optional: { meta: { filePath: string }
 const cache = new Map<string, string | null>();
 
 /**
+ * The home dir host skill installs are looked up under: `os.homedir()`, or the
+ * `FUSE_HARNESS_HOME` override (tests point it at a temp dir; Bun caches
+ * `os.homedir()`, so changing `HOME` in-process has no effect).
+ * @param env - Environment; defaults to `process.env`.
+ */
+export function hostHome(env: Record<string, string | undefined> = process.env): string {
+  return env.FUSE_HARNESS_HOME?.trim() || homedir();
+}
+
+/**
  * The running non-Claude host's own installed `skills/<name>/SKILL.md`, or null.
  * Bounded (shallow host-skill walk) and memoised per process.
  * @param skillName - Skill dir name (e.g. "solid-react").
@@ -50,7 +78,7 @@ const cache = new Map<string, string | null>();
  * @param home - Home dir (tests inject a fake host home).
  * @param env - Environment (host-home overrides).
  */
-export function hostSkillPath(skillName: string, hostId: string, home: string = homedir(), env: Record<string, string | undefined> = process.env): string | null {
+export function hostSkillPath(skillName: string, hostId: string, home: string = hostHome(), env: Record<string, string | undefined> = process.env): string | null {
   const key = `${hostId}\0${home}\0${skillName}\0${env.CODEX_HOME ?? ""}\0${env.KIMI_CODE_HOME ?? ""}`;
   if (cache.has(key)) return cache.get(key) ?? null;
   let found: string | null = null;

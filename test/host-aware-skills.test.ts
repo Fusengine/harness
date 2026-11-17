@@ -1,5 +1,4 @@
 import { test, expect } from "bun:test";
-import { homedir } from "node:os";
 import { utimesSync } from "node:fs";
 import { join } from "node:path";
 import { skillTriggerGate, detectRequiredSkills } from "../src/policy/skill-triggers";
@@ -8,10 +7,10 @@ import { resolveSkillPath } from "../src/policy/skill-path";
 import { browserNavigateGate } from "../src/policy/design/gates-pipeline";
 import { solidReadGate } from "../src/policy/apex";
 import { initDesignState } from "../src/policy/design/state";
-import { mkSkill } from "./host-aware-fixtures";
+import { fakeHome, mkSkill } from "./host-aware-fixtures";
 
-// Run with an isolated HOME on the command line: every fake host install is built under it.
-const HOME = homedir();
+// Every fake host install is built under a temp fake home wired in via FUSE_HARNESS_HOME (never the real home).
+const HOME = fakeHome();
 const SKILLS: Record<string, string> = {
   codex: join(HOME, ".codex", "plugins", "cache", "fusengine-codex", "react-expert", "1.0.39", "skills"),
   kimi: join(HOME, ".kimi-code", "plugins", "managed", "fusengine", "plugins", "react-expert", "skills"),
@@ -53,7 +52,7 @@ test("generic framework: a non-Claude host resolves solid-generic (never the pha
   expect(gate?.actions?.[0]).toBe(`Read ${join(dir, "solid-generic")}/SKILL.md`);
 });
 
-test("Cursor cache: with several hash dirs the most recently modified wins (not readdir order)", () => {
+test("Cursor cache: with several hash dirs the order is deterministic by name, never by mtime or readdir order", () => {
   const root = join(HOME, ".cursor", "plugins", "cache", "fusengine-cursor-plugins", "fuse-vue");
   const old = join(root, "aaa-old", "skills");
   const fresh = join(root, "zzz-new", "skills");
@@ -62,7 +61,8 @@ test("Cursor cache: with several hash dirs the most recently modified wins (not 
   utimesSync(join(root, "aaa-old"), new Date(2020, 1, 1), new Date(2020, 1, 1));
   utimesSync(join(root, "zzz-new"), new Date(), new Date());
   const deny = skillTriggerGate("react", "x", [], "vue-x", undefined, "/p/a.tsx", "cursor");
-  expect(deny?.actions?.[0]).toBe(`Read ${join(fresh, "vue-x", "SKILL.md")}`);
+  // `aaa-old` sorts first although `zzz-new` is the newer snapshot: mtime plays no role.
+  expect(deny?.actions?.[0]).toBe(`Read ${join(old, "vue-x", "SKILL.md")}`);
 });
 
 test("design navigate gate: Claude unchanged; a host points at its own design-system skill when installed", () => {
