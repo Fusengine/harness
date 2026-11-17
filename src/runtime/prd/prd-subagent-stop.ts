@@ -17,7 +17,8 @@ import { appendEvent } from "../../tracking/track-journal";
 import { diffTrackEvents } from "../../tracking/track-diff";
 import { prdAlreadyBlocked, recordPrdStopBlocked, type SessionTrack } from "../../tracking/session-state";
 import { signTrack, writeLastNonce } from "../../tracking/integrity";
-import { withTrackLockSync } from "../../tracking/track-lock-sync";
+import { LOCK_FAILED, withTrackLockSyncBlocking } from "../../tracking/track-lock-sync";
+import { spillTrackDiff } from "../../tracking/track-legacy-spill";
 import { atomicWrite } from "../../util/json-io";
 import { blockResponse } from "../../adapters/claude";
 import { respond } from "../respond";
@@ -80,12 +81,13 @@ function persistStopBlocked(trackFilePath: string, track: SessionTrack, key: str
     for (const ev of diffTrackEvents(track, next, now)) appendEvent(journalLogPath(trackFilePath), ev.field, ev.op, ev.value, ev.ts);
     return;
   }
-  withTrackLockSync(dirname(trackFilePath), () => {
+  const ran = withTrackLockSyncBlocking(dirname(trackFilePath), () => {
     const fresh = readTrackSync(trackFilePath, false); // reload under lock: avoid clobbering a concurrent legacy RMW
     const envelope = signTrack(recordPrdStopBlocked(fresh, key, now));
     atomicWrite(trackFilePath, JSON.stringify(envelope, null, 2));
     writeLastNonce(envelope.nonce);
   });
+  if (ran === LOCK_FAILED) spillTrackDiff(trackFilePath, track, recordPrdStopBlocked(track, key, now), now); // shared budget spent: spill, never drop
 }
 
 /**

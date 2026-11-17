@@ -2,10 +2,10 @@
  * @module store
  * Session-track persistence — TWO modes behind an env kill-switch:
  * - JOURNAL (default): writes append signed event lines to `track-<sid>.log`
- *   (O_APPEND, lock-free — see track-journal.ts), reads fold the log over the
- *   legacy `track-<sid>.json` snapshot. No lock on the hot path ⇒ the fan-out
- *   can no longer lose a write to "track lock busy, write skipped" — compaction
- *   included (it is rename-atomic, see track-compact.ts).
+ *   (short blocking lock, spill past the budget — see track-journal.ts), reads
+ *   fold the log over the legacy `track-<sid>.json` snapshot. A write is never
+ *   dropped for lock contention — compaction included (rename-atomic under the
+ *   same fair lock, see track-compact.ts).
  * - LEGACY (`FUSE_TRACK_JOURNAL=0`): the original locked read-modify-write,
  *   kept fully intact below as the instant rollback (G1) — no redeploy needed.
  *   NOTE: =0 does NOT honour the uncompacted journal (the track reads as its
@@ -22,6 +22,7 @@ import { dirname } from "node:path";
 import { appendEvent } from "./track-journal";
 import { diffTrackEvents } from "./track-diff";
 import { journalLogPath, maybeCompactJournal, readTrackSync } from "./track-compact";
+import { spillTrackDiff } from "./track-legacy-spill";
 
 /** Journal mode is the default; `FUSE_TRACK_JOURNAL=0` reverts to the legacy locked RMW (see the module NOTE: =0 ignores the uncompacted journal — recoverable, keep the `.log`). */
 export function trackJournalEnabled(): boolean {
@@ -72,9 +73,10 @@ export async function saveTrack(file: string, track: SessionTrack): Promise<void
 /**
  * Mutate a session track. Journal mode: load (snapshot ⊕ log), run `mutate`,
  * append the resulting events — lock-free, so a write is only ever lost to a
- * genuine I/O error (reported as `false`). Legacy mode: locked RMW; on lock
- * contention the write is SKIPPED (fail-open, stderr logged) and `false` is
- * returned — a named lost write, never a crash.
+ * genuine I/O error (reported as `false`). Legacy mode: locked RMW that waits
+ * the shared lock budget (fair, jittered); past it the write is SPILLED to the
+ * journal (recoverable, stderr logged) and `false` is returned — never dropped,
+ * never a crash.
  * @param file - The session track file.
  * @param mutate - Pure mutation over the freshly loaded track.
  * @returns True when the write landed.
@@ -91,5 +93,9 @@ export async function withTrack(
     const track = await loadTrack(file);
     await saveTrack(file, await mutate(track));
   });
-  return ran !== LOCK_FAILED;
+  if (ran !== LOCK_FAILED) return true;
+  // The shared lock budget expired (`fn` never ran): never drop the write — spill its diff (journal mode folds it; `false` = not in the legacy snapshot).
+  const prev = await loadTrack(file);
+  spillTrackDiff(file, prev, await mutate(prev), Date.now()); // logs its own outcome on stderr
+  return false;
 }
