@@ -14,8 +14,9 @@ import { trackFile } from "../runtime/paths";
 import { emptyTrack, type SessionTrack } from "../tracking/session-state";
 import { signTrack, verifyTrack, writeLastNonce, type TrackEnvelope } from "../tracking/integrity";
 import { atomicWrite } from "../util/json-io";
-import { LOCK_FAILED, withTrackLockSync } from "../tracking/track-lock-sync";
+import { LOCK_FAILED, withTrackLockSyncBlocking } from "../tracking/track-lock-sync";
 import { trackJournalEnabled } from "../tracking/store";
+import { spillTrackDiff } from "../tracking/track-legacy-spill";
 import { appendEvent } from "../tracking/track-journal";
 import { diffTrackEvents } from "../tracking/track-diff";
 import { journalLogPath, readTrackSync } from "../tracking/track-compact";
@@ -76,9 +77,9 @@ export function updateTrackSync(file: string, now: number, mutate: (track: Sessi
     return;
   }
   // Locked RMW (legacy kill-switch path, sync variant — this path cannot float
-  // async work): on contention the update is skipped like any other write
-  // error, fail-open.
-  const ran = withTrackLockSync(dirname(file), () => {
+  // async work): waits the shared lock budget; past it the diff is spilled to
+  // the journal (never dropped), fail-open.
+  const ran = withTrackLockSyncBlocking(dirname(file), () => {
     const track = loadTrackSync(file);
     const next = mutate(track);
     if (next === track) return; // nothing to add (or unreadable) → no rewrite
@@ -88,5 +89,8 @@ export function updateTrackSync(file: string, now: number, mutate: (track: Sessi
       writeLastNonce(envelope.nonce);
     } catch { /* fail-open: a lifecycle hook must never throw */ }
   });
-  if (ran === LOCK_FAILED) return;
+  if (ran === LOCK_FAILED) { // shared budget spent: spill the diff (journal mode folds it), never drop
+    const track = loadTrackSync(file), next = mutate(track);
+    if (next !== track) spillTrackDiff(file, track, next, now);
+  }
 }

@@ -6,9 +6,10 @@
  * - {@link readTrackSync}: the sync snapshot ⊕ journal read for the sync gates;
  * - {@link maybeCompactJournal}: past {@link COMPACT_BYTES}, fold the log into
  *   the signed snapshot — RENAME-ATOMIC (logrotate pattern) under the EXISTING
- *   track lock (rare, skipped on contention). Lock-free appends stay SAFE in
- *   both race windows: before the rename → captured by the fold; after → a
- *   fresh log at the original path (appendFileSync keeps no fd across calls).
+ *   track lock (rare; waits like an appender, deferred as a returned status only
+ *   past the shared budget). Appends take the same short lock, so they never
+ *   straddle the rename/fold/unlink; after the rename a fresh log appears at the
+ *   original path (appendFileSync keeps no fd across calls).
  * @packageDocumentation
  */
 import { existsSync, readFileSync, renameSync, statSync } from "node:fs";
@@ -19,7 +20,7 @@ import { readKey, signTrack, verifyEnvelope, verifyTrack, writeLastNonce, type T
 import { foldEvents, type TrackEvent } from "./track-journal";
 import { GENESIS, journalLogPath, lineMacOk, parseLine, sealOf, sidOf, snapshotPathOf, type ChainPos } from "./track-chain";
 import { readTrackReport, verifyJournal, walkChain } from "./track-verify";
-import { withTrackLock } from "./track-lock";
+import { LOCK_FAILED, withTrackLockSyncBlocking } from "./track-lock-sync";
 import { captureSpills, dropFiles, listCapturedSpills, listSpills, releaseSpills } from "./track-spill";
 
 export { journalLogPath } from "./track-chain";
@@ -114,15 +115,28 @@ function compactSync(file: string): void {
   }
 }
 
-/** Trigger compaction past the cap (`FUSE_TRACK_COMPACT_BYTES` overrides {@link COMPACT_BYTES}), under the existing lock (skipped on contention). */
-export async function maybeCompactJournal(file: string): Promise<void> {
+/** Outcome of {@link maybeCompactJournal}: nothing to do, folded, deferred (lock busy past the shared budget) or failed (I/O/verification error). Never a lost event: a deferral or failure leaves the log/spills intact for the next trigger. */
+export type CompactStatus = "idle" | "compacted" | "skipped" | "failed";
+
+/**
+ * Trigger compaction past the cap (`FUSE_TRACK_COMPACT_BYTES` overrides {@link COMPACT_BYTES}),
+ * under the existing lock. The taker is the SAME blocking, jittered, fair lock the appenders use
+ * (shared `FUSE_TRACK_LOCK_BUDGET_MS`, see track-lock-sync): the former async 8 ms fixed-step
+ * poll was outrun by appenders re-taking the lock every ~0.5 ms and starved (H3 CI flake).
+ * A deferral past the budget is a returned status, not a failure.
+ */
+export async function maybeCompactJournal(file: string): Promise<CompactStatus> {
   const cap = Number(process.env.FUSE_TRACK_COMPACT_BYTES) || COMPACT_BYTES;
   let size = -1; // no log yet
   try { size = statSync(journalLogPath(file)).size; } catch { /* spills may still be pending */ }
   const lp = journalLogPath(file);
   // pending spills or crashed-compaction captures always trigger an absorb/recovery
-  if (size < cap && !listSpills(lp).length && !listCapturedSpills(lp).length && !existsSync(`${lp}.folding`)) return;
-  await withTrackLock(dirname(file), async () => {
-    try { compactSync(file); } catch { /* rare path: the next trigger retries */ }
+  if (size < cap && !listSpills(lp).length && !listCapturedSpills(lp).length && !existsSync(`${lp}.folding`)) return "idle";
+  const ran = withTrackLockSyncBlocking(dirname(file), (): CompactStatus => {
+    try { compactSync(file); return "compacted"; } catch { return "failed"; } // rare path: the next trigger retries
   });
+  if (ran !== LOCK_FAILED) return ran;
+  // the phrase "write skipped" is kept ON PURPOSE: test/track-journal-race.test.ts asserts its absence, so a starved compaction stays visible to H3 (no event is lost: the log keeps them)
+  process.stderr.write(`harness: track lock busy past budget, compaction write skipped, events stay in the journal (${lp})\n`);
+  return "skipped";
 }
