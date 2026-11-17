@@ -5,8 +5,10 @@
  * Default base: ~/.fuse-harness/state/<projectHash>/
  * where projectHash = 8-char MD5 of CLAUDE_PROJECT_DIR (or cwd).
  * Persistent and not world-writable (unlike /tmp), and OUTSIDE the repo so the
- * agent has no "legitimate" reason to write it (the protected-path guard denies
- * it, and the gate verifies freshness from the transcript, not this file).
+ * agent has no "legitimate" reason to write it: the protected-path guard denies
+ * agent Write/Edit/Bash writes to `~/.fuse-harness/state/` and `~/.fuse-harness/.key`
+ * (the harness's own writes run inside the hook process, never through a tool call).
+ * Reads stay allowed. The gate verifies freshness from the transcript, not this file.
  *
  * @packageDocumentation
  */
